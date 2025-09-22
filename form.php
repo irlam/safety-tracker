@@ -1,14 +1,58 @@
 <?php
-// form.php — New Site Safety Tour (with canvas signature, per-question photos, hidden q_code/q_text)
-// Optional auth
-$auth = __DIR__ . '/includes/auth.php';
-if (is_file($auth)) { require_once $auth; if (function_exists('auth_check')) auth_check(); }
+/**
+ * File: form.php
+ * 
+ * Safety Tour Data Entry Form
+ * 
+ * This file provides the main form for creating new site safety tours. It presents
+ * a comprehensive checklist covering all aspects of construction site safety including
+ * site setup, statutory information, work equipment, high-risk operations, and more.
+ * Features include:
+ * - Interactive form with dynamic scoring
+ * - Canvas signature capture functionality  
+ * - Photo upload capability per question
+ * - Email recipient management
+ * - Responsive design for mobile and desktop use
+ * 
+ * The form submits to submit.php for processing, PDF generation, and email distribution.
+ * All dates and times are displayed in UK format (dd/mm/yyyy).
+ */
 
+declare(strict_types=1);
+
+// Set UK timezone for consistent date/time handling
+date_default_timezone_set('Europe/London');
+
+// Optional authentication - load auth system if available
+$authPath = __DIR__ . '/includes/auth.php';
+if (is_file($authPath)) {
+    require_once $authPath;
+    if (function_exists('auth_check')) {
+        auth_check(); // Verify user access permissions
+    }
+}
+
+// Load core functions and navigation components
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/nav.php';
+
+// Render the navigation menu with 'new' section highlighted
 render_nav('new');
 
-/* Checklist copied from your PDF (unchanged) */
+/**
+ * Safety Tour Checklist
+ * 
+ * Comprehensive safety checklist covering all major aspects of construction site safety.
+ * This checklist is structured into 10 main categories, each containing specific 
+ * questions that must be evaluated during the site tour.
+ * 
+ * Each checklist item contains:
+ * - 'code': Unique identifier for the question (e.g., "1.1", "2.3")  
+ * - 'q': The actual question text to be evaluated
+ * 
+ * The checklist covers: Site Setup, Statutory Information, Site Areas, Equipment,
+ * High-Risk Operations, Permits, Health, Communication, Environmental, and Waste Management.
+ */
 $CHECKLIST = [
   '1.0 Site Set Up' => [
     ['code'=>'1.1','q'=>"Is the Site perimeter in place with Temporary works applied for Fixed or Hera's fencing, and are gates secured with lockable devices."],
@@ -111,41 +155,71 @@ $CHECKLIST = [
   <h1>New Site Safety Tour</h1>
 
   <form action="submit.php" method="post" enctype="multipart/form-data" class="card" id="tourForm">
-    <!-- Score (optional manual; server will recompute from responses anyway) -->
+    <!-- Tour Scoring Section -->
+    <!-- Allows manual score entry, though server will recalculate from responses -->
     <div class="row3" style="margin-bottom:10px">
-      <div><label>Score — Achieved</label><input type="number" step="1" min="0" name="score_achieved" id="scoreA" placeholder="0"></div>
-      <div><label>Score — Total</label><input type="number" step="1" min="0" name="score_total" id="scoreT" placeholder="0"></div>
-      <div><label>Percent</label><input type="text" id="scoreP" name="score_percent" placeholder="Auto" readonly></div>
+      <div>
+        <label>Score — Achieved</label>
+        <input type="number" step="1" min="0" name="score_achieved" id="scoreA" placeholder="0">
+      </div>
+      <div>
+        <label>Score — Total</label>
+        <input type="number" step="1" min="0" name="score_total" id="scoreT" placeholder="0">
+      </div>
+      <div>
+        <label>Percent</label>
+        <input type="text" id="scoreP" name="score_percent" placeholder="Auto" readonly>
+      </div>
     </div>
 
-    <!-- Header -->
+    <!-- Basic Tour Information -->
     <div class="row2">
-      <div><label>Project Name *</label><input type="text" name="site" required placeholder="e.g., Rochdale Road"></div>
-      <div><label>Location *</label><input type="text" name="area" required placeholder="e.g., Block 1"></div>
+      <div>
+        <label>Project Name *</label>
+        <input type="text" name="site" required placeholder="e.g., Rochdale Road">
+      </div>
+      <div>
+        <label>Location *</label>
+        <input type="text" name="area" required placeholder="e.g., Block 1">
+      </div>
     </div>
     <div class="row2">
-      <div><label>Site Manager *</label><input type="text" name="lead_name" required placeholder="e.g., Darrell Cullen"></div>
-      <div><label>Inspection Date &amp; Time *</label><input type="datetime-local" name="tour_date" required value="<?=date('Y-m-d\\TH:i')?>"></div>
+      <div>
+        <label>Site Manager *</label>
+        <input type="text" name="lead_name" required placeholder="e.g., Darrell Cullen">
+      </div>
+      <div>
+        <label>Inspection Date &amp; Time *</label>
+        <!-- Using datetime-local for consistent input, but displays will use UK format -->
+        <input type="datetime-local" name="tour_date" required value="<?= date('Y-m-d\\TH:i') ?>">
+      </div>
     </div>
     <label>Prepared by / Participants</label>
     <input type="text" name="participants" placeholder="e.g., Anthony Tetlow; others">
 
-    <!-- Sections / questions -->
-    <?php $qIndex=0; foreach ($CHECKLIST as $section => $items): ?>
+    <!-- Safety Checklist Questions -->
+    <!-- Each section contains multiple questions that must be evaluated -->
+    <?php 
+    $questionIndex = 0; // Track question index for photo uploads
+    foreach ($CHECKLIST as $section => $items): 
+    ?>
       <div class="card">
         <h2><?= htmlspecialchars($section) ?></h2>
-        <?php foreach ($items as $i): ?>
+        <?php foreach ($items as $item): ?>
           <div class="card" style="border-color:#253044">
+            <!-- Question Display -->
             <div class="full" style="font-weight:600">
-              <span style="opacity:.8;margin-right:8px"><?= htmlspecialchars($i['code']) ?></span>
-              <?= htmlspecialchars($i['q']) ?>
+              <span style="opacity:.8;margin-right:8px"><?= htmlspecialchars($item['code']) ?></span>
+              <?= htmlspecialchars($item['q']) ?>
             </div>
 
-            <!-- Hidden fields so submit.php can build responses[] -->
-            <input type="hidden" name="q_code[]" value="<?= htmlspecialchars($i['code']) ?>">
-            <input type="hidden" name="q_text[]" value="<?= htmlspecialchars($i['q']) ?>">
+            <!-- Hidden fields for server-side processing -->
+            <!-- These allow submit.php to reconstruct the question details -->
+            <input type="hidden" name="q_code[]" value="<?= htmlspecialchars($item['code']) ?>">
+            <input type="hidden" name="q_text[]" value="<?= htmlspecialchars($item['q']) ?>">
             <input type="hidden" name="f_category[]" value="<?= htmlspecialchars($section) ?>">
 
+            <!-- Question Response Fields -->
             <div class="row3" style="margin-top:10px">
               <div>
                 <label>Result</label>
@@ -172,19 +246,30 @@ $CHECKLIST = [
               </div>
             </div>
 
+            <!-- Action Planning Fields -->
             <div class="row2">
-              <div><label>Action / To do (if required)</label><input type="text" name="a_action[]" placeholder="Describe the action required"></div>
-              <div><label>Responsible</label><input type="text" name="a_resp[]" placeholder="Person(s) responsible"></div>
+              <div>
+                <label>Action / To do (if required)</label>
+                <input type="text" name="a_action[]" placeholder="Describe the action required">
+              </div>
+              <div>
+                <label>Responsible</label>
+                <input type="text" name="a_resp[]" placeholder="Person(s) responsible">
+              </div>
             </div>
 
+            <!-- Evidence and Documentation -->
             <div class="full">
               <label>Notes / Evidence</label>
               <textarea name="f_note[]" placeholder="Observation, evidence, instruction…"></textarea>
               <div style="color:#9fb3c8;margin-top:6px">Attach photos for this question (optional)</div>
-              <input type="file" name="qphotos[<?= $qIndex ?>][]" accept="image/*" multiple>
+              <input type="file" name="qphotos[<?= $questionIndex ?>][]" accept="image/*" multiple>
             </div>
           </div>
-        <?php $qIndex++; endforeach; ?>
+        <?php 
+        $questionIndex++; 
+        endforeach; 
+        ?>
       </div>
     <?php endforeach; ?>
 
@@ -244,68 +329,196 @@ $CHECKLIST = [
 </div>
 
 <script>
-// score %
-(function(){
-  const A = document.getElementById('scoreA'), T = document.getElementById('scoreT'), P = document.getElementById('scoreP');
-  function upd(){ const a=+A.value||0, t=+T.value||0; P.value = t>0 ? (a/t*100).toFixed(2)+'%' : ''; }
-  A.addEventListener('input',upd); T.addEventListener('input',upd);
+/**
+ * Form JavaScript Functionality
+ * 
+ * This script provides interactive features for the safety tour form:
+ * 1. Automatic score percentage calculation
+ * 2. Email recipient management with chips
+ * 3. Canvas-based signature capture
+ */
+
+// Score Percentage Calculator
+// Automatically calculates and displays percentage when achieved/total scores are entered
+(function() {
+  const achievedInput = document.getElementById('scoreA');
+  const totalInput = document.getElementById('scoreT'); 
+  const percentInput = document.getElementById('scoreP');
+  
+  function updatePercentage() {
+    const achieved = parseInt(achievedInput.value) || 0;
+    const total = parseInt(totalInput.value) || 0;
+    percentInput.value = total > 0 ? (achieved / total * 100).toFixed(2) + '%' : '';
+  }
+  
+  achievedInput.addEventListener('input', updatePercentage);
+  totalInput.addEventListener('input', updatePercentage);
 })();
 
-// recipients chips (single implementation)
-(function(){
-  const set = new Set();
-  const chips = document.getElementById('recChips');
-  const input = document.getElementById('recInput');
-  const hidden = document.getElementById('recipients');
+// Email Recipients Management
+// Handles adding/removing email addresses as chips
+(function() {
+  const emailSet = new Set();
+  const chipsContainer = document.getElementById('recChips');
+  const emailInput = document.getElementById('recInput');
+  const hiddenField = document.getElementById('recipients');
 
-  function paint(){
-    chips.innerHTML = '';
-    [...set].forEach(email => {
+  function renderChips() {
+    chipsContainer.innerHTML = '';
+    [...emailSet].forEach(email => {
       const chip = document.createElement('span');
       chip.className = 'chip';
       chip.textContent = email + ' ';
-      const x = document.createElement('button'); x.type='button'; x.textContent='×';
-      x.onclick = ()=>{ set.delete(email); paint(); };
-      chip.appendChild(x);
-      chips.appendChild(chip);
+      
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.textContent = '×';
+      removeButton.onclick = () => {
+        emailSet.delete(email);
+        renderChips();
+      };
+      
+      chip.appendChild(removeButton);
+      chipsContainer.appendChild(chip);
     });
-    hidden.value = [...set].join(',');
+    hiddenField.value = [...emailSet].join(',');
   }
-  function add(raw){
-    const email = (raw||'').trim();
+  
+  function addEmail(emailText) {
+    const email = (emailText || '').trim();
     if (!email) return;
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { input.value=''; return; }
-    set.add(email.toLowerCase()); input.value=''; paint();
+    
+    // Basic email validation
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      emailInput.value = '';
+      return;
+    }
+    
+    emailSet.add(email.toLowerCase());
+    emailInput.value = '';
+    renderChips();
   }
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(input.value); } });
-  document.querySelectorAll('.rec-suggest').forEach(btn => btn.addEventListener('click', ()=> add(btn.dataset.email||'')));
+  
+  // Add email on Enter key press
+  emailInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addEmail(emailInput.value);
+    }
+  });
+  
+  // Handle previously used email suggestions
+  document.querySelectorAll('.rec-suggest').forEach(button => {
+    button.addEventListener('click', () => addEmail(button.dataset.email || ''));
+  });
 })();
 
-// Signature pad (vanilla)
-(function(){
-  const cvs = document.getElementById('sig');
+// Digital Signature Capture System
+// Provides canvas-based signature drawing with touch/mouse support
+(function() {
+  const canvas = document.getElementById('sig');
   const dataField = document.getElementById('signature_data');
-  const err = document.getElementById('sigErr');
-  const clearBtn = document.getElementById('sigClear');
-  let drawing = false, dirty = false, ctx;
+  const errorDiv = document.getElementById('sigErr');
+  const clearButton = document.getElementById('sigClear');
+  
+  let isDrawing = false;
+  let hasDrawn = false;
+  let context;
 
-  function size(){ const r=cvs.getBoundingClientRect(); cvs.width = Math.max(600, r.width*2); cvs.height = 300; ctx = cvs.getContext('2d'); ctx.lineWidth = 3; ctx.lineCap='round'; ctx.strokeStyle='#e5e7eb'; ctx.clearRect(0,0,cvs.width,cvs.height); dirty=false; dataField.value=''; }
-  function pos(e){ const rect=cvs.getBoundingClientRect(); const x=(e.touches?e.touches[0].clientX:e.clientX)-rect.left; const y=(e.touches?e.touches[0].clientY:e.clientY)-rect.top; const sx=cvs.width/rect.width; const sy=cvs.height/rect.height; return {x:x*sx,y:y*sy}; }
-  function start(e){ drawing=true; dirty=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); e.preventDefault(); }
-  function move(e){ if(!drawing) return; const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); e.preventDefault(); }
-  function end(){ drawing=false; if (dirty) { dataField.value = cvs.toDataURL('image/png'); } }
+  // Initialize canvas with proper sizing and styling
+  function initializeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.max(600, rect.width * 2); // High resolution for crisp output
+    canvas.height = 300;
+    
+    context = canvas.getContext('2d');
+    context.lineWidth = 3;
+    context.lineCap = 'round';
+    context.strokeStyle = '#e5e7eb'; // Light color for visibility
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    
+    hasDrawn = false;
+    dataField.value = '';
+  }
+  
+  // Convert mouse/touch coordinates to canvas coordinates
+  function getCanvasPosition(event) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+    const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+    
+    const x = (clientX - rect.left);
+    const y = (clientY - rect.top);
+    
+    // Scale to canvas resolution
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    return { x: x * scaleX, y: y * scaleY };
+  }
+  
+  // Start drawing
+  function startDrawing(event) {
+    isDrawing = true;
+    hasDrawn = true;
+    
+    const pos = getCanvasPosition(event);
+    context.beginPath();
+    context.moveTo(pos.x, pos.y);
+    
+    event.preventDefault();
+  }
+  
+  // Continue drawing
+  function continueDrawing(event) {
+    if (!isDrawing) return;
+    
+    const pos = getCanvasPosition(event);
+    context.lineTo(pos.x, pos.y);
+    context.stroke();
+    
+    event.preventDefault();
+  }
+  
+  // Stop drawing and save signature data
+  function stopDrawing() {
+    isDrawing = false;
+    
+    if (hasDrawn) {
+      // Convert canvas to PNG data URL for form submission
+      dataField.value = canvas.toDataURL('image/png');
+    }
+  }
 
-  size(); window.addEventListener('resize', size);
-  cvs.addEventListener('mousedown', start); cvs.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
-  cvs.addEventListener('touchstart', start, {passive:false}); cvs.addEventListener('touchmove', move, {passive:false}); cvs.addEventListener('touchend', end);
+  // Initialize canvas on page load and window resize
+  initializeCanvas();
+  window.addEventListener('resize', initializeCanvas);
+  
+  // Mouse event handlers
+  canvas.addEventListener('mousedown', startDrawing);
+  canvas.addEventListener('mousemove', continueDrawing);
+  window.addEventListener('mouseup', stopDrawing);
+  
+  // Touch event handlers (for mobile devices)
+  canvas.addEventListener('touchstart', startDrawing, { passive: false });
+  canvas.addEventListener('touchmove', continueDrawing, { passive: false });
+  canvas.addEventListener('touchend', stopDrawing);
 
-  clearBtn.addEventListener('click', ()=>{ size(); err.style.display='none'; });
+  // Clear signature button
+  clearButton.addEventListener('click', () => {
+    initializeCanvas();
+    errorDiv.style.display = 'none';
+  });
 
-  // Require signature (dataURL) OR uploaded file
-  document.getElementById('tourForm').addEventListener('submit', function(e){
-    const hasCanvas = (dataField.value && dataField.value.startsWith('data:image/'));
-    const file = document.querySelector('input[name="signature_file"]').files[0];
-    if (!hasCanvas && !file) { err.style.display='block'; e.preventDefault(); }
+  // Form validation - require signature before submission
+  document.getElementById('tourForm').addEventListener('submit', function(event) {
+    const hasCanvasSignature = dataField.value && dataField.value.startsWith('data:image/');
+    const hasUploadedSignature = document.querySelector('input[name="signature_file"]').files[0];
+    
+    if (!hasCanvasSignature && !hasUploadedSignature) {
+      errorDiv.style.display = 'block';
+      event.preventDefault(); // Prevent form submission
+    }
   });
 })();
 </script>
