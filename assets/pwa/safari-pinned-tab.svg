@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Monochrome vector for Safari pinned tab -->
+  <defs>
+    <style>
+      .fg { fill: #000000; }
+    </style>
+  </defs>
+
+  <!-- Shield -->
+  <path class="fg" d="M512 80c160 0 304 56 304 160v280c0 204-183 358-304 424C391 878 208 724 208 520V240C208 136 352 80 512 80Z"/>
+
+  <!-- Check mark -->
+  <path class="fg" d="M710 382c14 14 14 37 0 51l-169 169c-14 14-37 14-51 0l-97-97c-14-14-14-37 0-51s37-14 51 0l72 72 144-144c14-14 37-14 51 0Z"/>
+
+  <!-- Bottom diagonal stripes -->
+  <rect class="fg" x="292" y="700" width="110" height="50" transform="rotate(-25 347 725)"/>
+  <rect class="fg" x="442" y="740" width="130" height="50" transform="rotate(-25 507 765)"/>
+  <rect class="fg" x="612" y="770" width="110" height="50" transform="rotate(-25 667 795)"/>
+
+</svg>
