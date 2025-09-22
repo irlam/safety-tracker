@@ -1,55 +1,156 @@
 <?php
-// /submit.php — Save tour, files, PDF, email, success page
+/**
+ * File: submit.php
+ * 
+ * Safety Tour Form Submission Handler
+ * 
+ * This file processes form submissions from the safety tour entry form (form.php).
+ * It handles the complete workflow of:
+ * - Validating and saving form data to the database
+ * - Processing file uploads (photos, signatures)
+ * - Generating PDF reports
+ * - Sending email notifications to recipients
+ * - Redirecting to success page with status indicators
+ * 
+ * All data validation, file handling, and email distribution happens here.
+ * Dates and times are processed and stored in UK format (Europe/London timezone).
+ */
+
 declare(strict_types=1);
 
-// (optional) auth
-$auth = __DIR__ . '/includes/auth.php';
-if (is_file($auth)) { require_once $auth; if (function_exists('auth_check')) auth_check(); }
-
-require_once __DIR__ . '/includes/functions.php';
+// Set UK timezone for consistent date/time handling
 date_default_timezone_set('Europe/London');
 
+// Optional authentication - load auth system if available
+$authPath = __DIR__ . '/includes/auth.php';
+if (is_file($authPath)) {
+    require_once $authPath;
+    if (function_exists('auth_check')) {
+        auth_check(); // Verify user access permissions
+    }
+}
+
+// Load core functions and establish database connection
+require_once __DIR__ . '/includes/functions.php';
 $pdo = db();
 
-/* -------------------------------------------------------
-   Helpers
---------------------------------------------------------*/
-function hslug(string $s): string {
-  $s = strtolower(trim(preg_replace('~[^a-z0-9]+~i', '-', $s), '-'));
-  return $s !== '' ? $s : 'tour';
-}
-function table_columns(PDO $pdo, string $table): array {
-  try {
-    $st = $pdo->prepare("SELECT COLUMN_NAME FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ?");
-    $st->execute([$table]);
-    return array_map(fn($r)=>$r['COLUMN_NAME'], $st->fetchAll());
-  } catch (Throwable $e) { return []; }
-}
-function col_exists(PDO $pdo, string $table, string $col): bool {
-  static $cache = [];
-  $key = $table;
-  if (!isset($cache[$key])) $cache[$key] = table_columns($pdo, $table);
-  return in_array($col, $cache[$key] ?? [], true);
-}
-/** Save a data:URL PNG signature to /uploads/signatures and return web-relative path */
-function save_signature_data(string $dataUrl): ?string {
-  if (!preg_match('~^data:image/(png|jpeg);base64,~', $dataUrl)) return null;
-  $data = base64_decode(preg_replace('~^data:image/\w+;base64,~', '', $dataUrl), true);
-  if ($data === false) return null;
-  $dir = __DIR__ . '/uploads/signatures';
-  if (!is_dir($dir)) @mkdir($dir, 0775, true);
-  $name = 'sig_' . uniqid('', true) . '.png';
-  $abs  = $dir . '/' . $name;
-  if (@file_put_contents($abs, $data) === false) return null;
-  // return web path relative to project root
-  return 'uploads/signatures/' . $name;
+/**
+ * =============================================================================
+ * UTILITY FUNCTIONS
+ * =============================================================================
+ * Helper functions for data processing, file handling, and database operations
+ */
+
+/**
+ * Create a URL-friendly slug from a string
+ * Converts text to lowercase, replaces special characters with hyphens
+ * 
+ * @param string $text The input text to convert
+ * @return string The slugified text, defaults to 'tour' if empty
+ */
+function createSlug(string $text): string 
+{
+    $slug = strtolower(trim(preg_replace('~[^a-z0-9]+~i', '-', $text), '-'));
+    return $slug !== '' ? $slug : 'tour';
 }
 
-/* -------------------------------------------------------
-   Re-declare checklist here (same order as form.php)
-   (So we can rebuild code/question text server-side)
---------------------------------------------------------*/
-$CHECKLIST = [
+/**
+ * Get column names for a database table
+ * Uses information_schema to retrieve all column names safely
+ * 
+ * @param PDO $pdo Database connection
+ * @param string $tableName Name of the table to examine
+ * @return array List of column names, empty array if query fails
+ */
+function getTableColumns(PDO $pdo, string $tableName): array 
+{
+    try {
+        $statement = $pdo->prepare(
+            "SELECT COLUMN_NAME FROM information_schema.columns 
+             WHERE table_schema = DATABASE() AND table_name = ?"
+        );
+        $statement->execute([$tableName]);
+        return array_map(fn($row) => $row['COLUMN_NAME'], $statement->fetchAll());
+    } catch (Throwable $e) { 
+        return []; 
+    }
+}
+
+/**
+ * Check if a specific column exists in a database table
+ * Uses caching to avoid repeated database queries
+ * 
+ * @param PDO $pdo Database connection
+ * @param string $tableName Name of the table
+ * @param string $columnName Name of the column to check
+ * @return bool True if column exists, false otherwise
+ */
+function columnExists(PDO $pdo, string $tableName, string $columnName): bool 
+{
+    static $columnCache = [];
+    
+    $cacheKey = $tableName;
+    if (!isset($columnCache[$cacheKey])) {
+        $columnCache[$cacheKey] = getTableColumns($pdo, $tableName);
+    }
+    
+    return in_array($columnName, $columnCache[$cacheKey] ?? [], true);
+}
+
+/**
+ * Save signature data from canvas to file system
+ * Processes base64-encoded image data and saves as PNG file
+ * 
+ * @param string $dataUrl Base64-encoded image data URL from canvas
+ * @return string|null Web-relative path to saved file, null if failed
+ */
+function saveSignatureData(string $dataUrl): ?string 
+{
+    // Validate data URL format (PNG or JPEG)
+    if (!preg_match('~^data:image/(png|jpeg);base64,~', $dataUrl)) {
+        return null;
+    }
+    
+    // Extract and decode base64 data
+    $imageData = base64_decode(
+        preg_replace('~^data:image/\w+;base64,~', '', $dataUrl), 
+        true
+    );
+    
+    if ($imageData === false) {
+        return null;
+    }
+    
+    // Create uploads directory if it doesn't exist
+    $uploadDirectory = __DIR__ . '/uploads/signatures';
+    if (!is_dir($uploadDirectory)) {
+        @mkdir($uploadDirectory, 0775, true);
+    }
+    
+    // Generate unique filename and save file
+    $fileName = 'sig_' . uniqid('', true) . '.png';
+    $filePath = $uploadDirectory . '/' . $fileName;
+    
+    if (@file_put_contents($filePath, $imageData) === false) {
+        return null;
+    }
+    
+    // Return web-relative path for database storage
+    return 'uploads/signatures/' . $fileName;
+}
+
+/**
+ * =============================================================================
+ * SAFETY CHECKLIST REFERENCE
+ * =============================================================================
+ * 
+ * Complete safety checklist matching form.php structure exactly.
+ * Used for server-side reconstruction of question codes and text during processing.
+ * This ensures data integrity and allows for proper PDF generation and validation.
+ * 
+ * Note: This must be kept in sync with the checklist in form.php
+ */
+$SAFETY_CHECKLIST = [
   '1.0 Site Set Up' => [
     ['code'=>'1.1','q'=>"Is the Site perimeter in place with Temporary works applied for Fixed or Hera's fencing, and are gates secured with lockable devices."],
     ['code'=>'1.2','q'=>"Has Safe access and egress been provided for pedestrians and segregation applied away from plant, equipment and materials."],
@@ -112,174 +213,275 @@ $CHECKLIST = [
   ],
 ];
 
-// Flatten to align with posted arrays
-$FLAT = []; foreach ($CHECKLIST as $section => $items) {
-  foreach ($items as $i) { $FLAT[] = ['section'=>$section, 'code'=>$i['code'], 'q'=>$i['q']]; }
-}
-
-/* -------------------------------------------------------
-   Gather POST
---------------------------------------------------------*/
-$site         = trim($_POST['site']        ?? '');
-$area         = trim($_POST['area']        ?? '');
-$lead_name    = trim($_POST['lead_name']   ?? '');
-$participants = trim($_POST['participants']?? '');
-$tour_date_in = (string)($_POST['tour_date'] ?? '');
-$tour_date    = $tour_date_in ? date('Y-m-d H:i:s', strtotime($tour_date_in)) : date('Y-m-d H:i:s');
-
-$check_status = $_POST['check_status'] ?? [];
-$f_severity   = $_POST['f_severity']   ?? [];
-$a_due        = $_POST['a_due']        ?? [];
-$a_action     = $_POST['a_action']     ?? [];
-$a_resp       = $_POST['a_resp']       ?? [];
-$f_note       = $_POST['f_note']       ?? [];
-$f_category   = $_POST['f_category']   ?? [];
-
-$score_achieved = isset($_POST['score_achieved']) ? (int)$_POST['score_achieved'] : null;
-$score_total    = isset($_POST['score_total'])    ? (int)$_POST['score_total']    : null;
-$score_percent  = isset($_POST['score_percent']) && $_POST['score_percent']!=='' ? (float)str_replace('%','',$_POST['score_percent']) : null;
-
-// Recipients (chips)
-$recipients_raw = trim((string)($_POST['recipients'] ?? ''));
-$recipients = [];
-if ($recipients_raw !== '') {
-  foreach (explode(',', $recipients_raw) as $e) {
-    $e = strtolower(trim($e));
-    if ($e && preg_match('~^[^@\s]+@[^@\s]+\.[^@\s]+$~', $e)) $recipients[] = $e;
-  }
-  $recipients = array_values(array_unique($recipients));
-}
-
-/* -------------------------------------------------------
-   Signature (required: file OR canvas dataURL)
---------------------------------------------------------*/
-$signature_path = null;
-$has_file = !empty($_FILES['signature_file']['tmp_name']) && is_uploaded_file($_FILES['signature_file']['tmp_name']);
-$has_data = isset($_POST['signature_data']) && strpos($_POST['signature_data'], 'data:image/') === 0;
-
-if ($has_file) {
-  $signature_path = save_file($_FILES['signature_file'], 'signatures');
-} elseif ($has_data) {
-  $signature_path = save_signature_data((string)$_POST['signature_data']);
-}
-
-if (!$signature_path) {
-  http_response_code(400);
-  echo "Signature required."; exit;
-}
-
-/* -------------------------------------------------------
-   Save per-question photos + extra photos
---------------------------------------------------------*/
-// Per-question matrix (qphotos[index][])
-$qImages = []; // index => [paths...]
-if (!empty($_FILES['qphotos']['name']) && is_array($_FILES['qphotos']['name'])) {
-  foreach ($_FILES['qphotos']['name'] as $idx => $names) {
-    if (!is_array($names)) continue;
-    foreach ($names as $k => $n) {
-      $tmp = [
-        'name'     => $_FILES['qphotos']['name'][$idx][$k] ?? '',
-        'type'     => $_FILES['qphotos']['type'][$idx][$k] ?? '',
-        'tmp_name' => $_FILES['qphotos']['tmp_name'][$idx][$k] ?? '',
-        'error'    => $_FILES['qphotos']['error'][$idx][$k] ?? 0,
-        'size'     => $_FILES['qphotos']['size'][$idx][$k] ?? 0,
-      ];
-      if (empty($tmp['tmp_name'])) continue;
-      $rel = save_file($tmp, 'tours'); // save now; we'll not depend on tour id path
-      if ($rel) $qImages[(int)$idx][] = $rel;
+// Flatten checklist structure to align with posted form arrays
+// This creates a simple array that matches the order of form inputs
+$flattenedChecklist = [];
+foreach ($SAFETY_CHECKLIST as $section => $items) {
+    foreach ($items as $item) {
+        $flattenedChecklist[] = [
+            'section' => $section, 
+            'code' => $item['code'], 
+            'q' => $item['q']
+        ];
     }
-  }
 }
 
-// Extra photos
-$photos = [];
+/**
+ * =============================================================================
+ * FORM DATA PROCESSING
+ * =============================================================================
+ * Extract and validate all form data submitted from the safety tour form
+ */
+
+// Basic tour information
+$siteName = trim($_POST['site'] ?? '');
+$areaLocation = trim($_POST['area'] ?? '');
+$leadName = trim($_POST['lead_name'] ?? '');
+$participantsList = trim($_POST['participants'] ?? '');
+
+// Process tour date - convert to UK timezone and proper format
+$tourDateInput = (string)($_POST['tour_date'] ?? '');
+$tourDate = $tourDateInput 
+    ? date('Y-m-d H:i:s', strtotime($tourDateInput)) 
+    : date('Y-m-d H:i:s'); // Default to current UK time
+
+// Question response arrays (from form checkboxes/dropdowns/inputs)
+$checkStatuses = $_POST['check_status'] ?? []; // Pass/Fail/Improvement/N/A
+$severityLevels = $_POST['f_severity'] ?? [];   // Low/Medium/High
+$actionDueDates = $_POST['a_due'] ?? [];        // Due dates for actions
+$actionDescriptions = $_POST['a_action'] ?? []; // What needs to be done
+$responsiblePersons = $_POST['a_resp'] ?? [];   // Who is responsible
+$observationNotes = $_POST['f_note'] ?? [];     // Notes and evidence
+$questionCategories = $_POST['f_category'] ?? []; // Section categories
+
+// Manual scoring (server will recalculate anyway)
+$scoreAchieved = isset($_POST['score_achieved']) ? (int)$_POST['score_achieved'] : null;
+$scoreTotal = isset($_POST['score_total']) ? (int)$_POST['score_total'] : null;
+$scorePercent = null;
+if (isset($_POST['score_percent']) && $_POST['score_percent'] !== '') {
+    $scorePercent = (float)str_replace('%', '', $_POST['score_percent']);
+}
+
+// Email recipients processing
+$recipientsRaw = trim((string)($_POST['recipients'] ?? ''));
+$emailRecipients = [];
+if ($recipientsRaw !== '') {
+    foreach (explode(',', $recipientsRaw) as $email) {
+        $email = strtolower(trim($email));
+        if ($email && preg_match('~^[^@\s]+@[^@\s]+\.[^@\s]+$~', $email)) {
+            $emailRecipients[] = $email;
+        }
+    }
+    $emailRecipients = array_values(array_unique($emailRecipients));
+}
+
+/**
+ * =============================================================================
+ * SIGNATURE PROCESSING
+ * =============================================================================
+ * Handle signature validation and file saving (required field)
+ */
+$signaturePath = null;
+$hasUploadedFile = !empty($_FILES['signature_file']['tmp_name']) && 
+                   is_uploaded_file($_FILES['signature_file']['tmp_name']);
+$hasCanvasData = isset($_POST['signature_data']) && 
+                 strpos($_POST['signature_data'], 'data:image/') === 0;
+
+if ($hasUploadedFile) {
+    // Process uploaded signature file
+    $signaturePath = save_file($_FILES['signature_file'], 'signatures');
+} elseif ($hasCanvasData) {
+    // Process canvas-drawn signature
+    $signaturePath = saveSignatureData((string)$_POST['signature_data']);
+}
+
+// Signature is required - fail if neither method provided valid signature
+if (!$signaturePath) {
+    http_response_code(400);
+    echo "Signature required - please sign the form or upload a signature image.";
+    exit;
+}
+
+/**
+ * =============================================================================
+ * FILE UPLOAD PROCESSING
+ * =============================================================================
+ * Handle photo uploads for individual questions and general tour photos
+ */
+
+// Process per-question photo uploads
+// These are organized as qphotos[questionIndex][fileIndex]
+$questionPhotos = []; // Will store: questionIndex => [file_paths...]
+
+if (!empty($_FILES['qphotos']['name']) && is_array($_FILES['qphotos']['name'])) {
+    foreach ($_FILES['qphotos']['name'] as $questionIndex => $fileNames) {
+        if (!is_array($fileNames)) continue;
+        
+        foreach ($fileNames as $fileIndex => $fileName) {
+            // Reconstruct individual file upload array for processing
+            $fileUpload = [
+                'name'     => $_FILES['qphotos']['name'][$questionIndex][$fileIndex] ?? '',
+                'type'     => $_FILES['qphotos']['type'][$questionIndex][$fileIndex] ?? '',
+                'tmp_name' => $_FILES['qphotos']['tmp_name'][$questionIndex][$fileIndex] ?? '',
+                'error'    => $_FILES['qphotos']['error'][$questionIndex][$fileIndex] ?? 0,
+                'size'     => $_FILES['qphotos']['size'][$questionIndex][$fileIndex] ?? 0,
+            ];
+            
+            // Skip if no file was uploaded
+            if (empty($fileUpload['tmp_name'])) continue;
+            
+            // Save file and store relative path
+            $savedPath = save_file($fileUpload, 'tours');
+            if ($savedPath) {
+                $questionPhotos[(int)$questionIndex][] = $savedPath;
+            }
+        }
+    }
+}
+
+// Process general tour photos (not linked to specific questions)
+$generalPhotos = [];
 if (!empty($_FILES['photos']['name'][0] ?? '')) {
-  foreach ($_FILES['photos']['name'] as $i => $n) {
-    $tmp = [
-      'name'     => $_FILES['photos']['name'][$i] ?? '',
-      'type'     => $_FILES['photos']['type'][$i] ?? '',
-      'tmp_name' => $_FILES['photos']['tmp_name'][$i] ?? '',
-      'error'    => $_FILES['photos']['error'][$i] ?? 0,
-      'size'     => $_FILES['photos']['size'][$i] ?? 0,
-    ];
-    if (empty($tmp['tmp_name'])) continue;
-    $rel = save_file($tmp, 'tours');
-    if ($rel) $photos[] = $rel;
-  }
+    foreach ($_FILES['photos']['name'] as $index => $fileName) {
+        // Reconstruct individual file upload array
+        $fileUpload = [
+            'name'     => $_FILES['photos']['name'][$index] ?? '',
+            'type'     => $_FILES['photos']['type'][$index] ?? '',
+            'tmp_name' => $_FILES['photos']['tmp_name'][$index] ?? '',
+            'error'    => $_FILES['photos']['error'][$index] ?? 0,
+            'size'     => $_FILES['photos']['size'][$index] ?? 0,
+        ];
+        
+        // Skip if no file was uploaded
+        if (empty($fileUpload['tmp_name'])) continue;
+        
+        // Save file and store relative path
+        $savedPath = save_file($fileUpload, 'tours');
+        if ($savedPath) {
+            $generalPhotos[] = $savedPath;
+        }
+    }
 }
 
-/* -------------------------------------------------------
-   Build responses array (aligned to FLAT checklist)
---------------------------------------------------------*/
-$responses = [];
-$N = max(
-  count($FLAT),
-  count($check_status), count($f_severity), count($a_due),
-  count($a_action), count($a_resp), count($f_note), count($f_category)
+/**
+ * =============================================================================
+ * RESPONSE DATA COMPILATION
+ * =============================================================================
+ * Build complete response array by combining form data with checklist structure
+ */
+
+// Build comprehensive responses array aligned with the flattened checklist
+$tourResponses = [];
+
+// Determine maximum array length to handle all form inputs safely
+$maxResponses = max(
+    count($flattenedChecklist),
+    count($checkStatuses), 
+    count($severityLevels), 
+    count($actionDueDates),
+    count($actionDescriptions), 
+    count($responsiblePersons), 
+    count($observationNotes), 
+    count($questionCategories)
 );
 
-for ($i = 0; $i < $N; $i++) {
-  $meta = $FLAT[$i] ?? ['section'=>$f_category[$i] ?? '', 'code'=>'', 'q'=>''];
-  $responses[] = [
-    'section'    => (string)($meta['section'] ?? ($f_category[$i] ?? '')),
-    'code'       => (string)($meta['code'] ?? ''),
-    'question'   => (string)($meta['q'] ?? ''),
-    'result'     => (string)($check_status[$i] ?? ''),
-    'priority'   => (string)($f_severity[$i]   ?? ''),
-    'note'       => (string)($f_note[$i]       ?? ''),
-    'action'     => (string)($a_action[$i]     ?? ''),
-    'responsible'=> (string)($a_resp[$i]       ?? ''),
-    'due'        => (string)($a_due[$i]        ?? ''),
-    'images'     => array_values($qImages[$i] ?? []),
-  ];
+// Build response for each question in the checklist
+for ($index = 0; $index < $maxResponses; $index++) {
+    // Get checklist metadata (section, code, question text)
+    $checklistItem = $flattenedChecklist[$index] ?? [
+        'section' => $questionCategories[$index] ?? '', 
+        'code' => '', 
+        'q' => ''
+    ];
+    
+    // Compile complete response data for this question
+    $tourResponses[] = [
+        'section'     => (string)($checklistItem['section'] ?? ($questionCategories[$index] ?? '')),
+        'code'        => (string)($checklistItem['code'] ?? ''),
+        'question'    => (string)($checklistItem['q'] ?? ''),
+        'result'      => (string)($checkStatuses[$index] ?? ''),        // Pass/Fail/Improvement/N/A
+        'priority'    => (string)($severityLevels[$index] ?? ''),       // Low/Medium/High
+        'note'        => (string)($observationNotes[$index] ?? ''),     // Observations and evidence
+        'action'      => (string)($actionDescriptions[$index] ?? ''),   // Required actions
+        'responsible' => (string)($responsiblePersons[$index] ?? ''),   // Who is responsible
+        'due'         => (string)($actionDueDates[$index] ?? ''),       // When action is due
+        'images'      => array_values($questionPhotos[$index] ?? []),   // Associated photos
+    ];
 }
 
-/* -------------------------------------------------------
-   Auto score (if not supplied)
-   % = Pass / (Pass + Fail + Improvement) * 100
---------------------------------------------------------*/
-$score_auto = tally_score($responses);
-if ($score_achieved === null || $score_total === null) {
-  $score_total    = $score_auto['counts']['pass'] + $score_auto['counts']['fail'] + $score_auto['counts']['improvement'];
-  $score_achieved = $score_auto['counts']['pass'];
-}
-if ($score_percent === null) $score_percent = $score_total > 0 ? round(($score_achieved / $score_total) * 100, 2) : null;
+/**
+ * =============================================================================
+ * AUTOMATIC SCORING CALCULATION
+ * =============================================================================
+ * Calculate tour score based on Pass/Fail/Improvement responses
+ */
 
-/* -------------------------------------------------------
-   Insert tour (only columns that exist)
---------------------------------------------------------*/
-$cols = table_columns($pdo, 'safety_tours');
-$data = [
-  'tour_date'      => $tour_date,
-  'site'           => $site,
-  'area'           => $area,
-  'lead_name'      => $lead_name,
-  'participants'   => $participants,
-  'responses'      => json_encode($responses, JSON_UNESCAPED_UNICODE),
-  'photos'         => json_encode($photos, JSON_UNESCAPED_UNICODE),
-  'signature_path' => $signature_path,
-  'status'         => 'Open',
-  'score_achieved' => $score_achieved,
-  'score_total'    => $score_total,
-  'score_percent'  => $score_percent,
-  'recipients'     => $recipients ? implode(',', $recipients) : null,
+// Calculate automatic score if manual scores weren't provided
+$autoScoreData = tally_score($tourResponses);
+
+if ($scoreAchieved === null || $scoreTotal === null) {
+    // Use automatic calculation based on response counts
+    $scoreTotal = $autoScoreData['counts']['pass'] + 
+                  $autoScoreData['counts']['fail'] + 
+                  $autoScoreData['counts']['improvement'];
+    $scoreAchieved = $autoScoreData['counts']['pass'];
+}
+
+// Calculate percentage if not manually provided
+if ($scorePercent === null) {
+    $scorePercent = $scoreTotal > 0 
+        ? round(($scoreAchieved / $scoreTotal) * 100, 2) 
+        : null;
+}
+
+/**
+ * =============================================================================
+ * DATABASE OPERATIONS
+ * =============================================================================
+ * Save tour data to database with dynamic column checking
+ */
+
+// Get available columns in safety_tours table for dynamic insertion
+$availableColumns = getTableColumns($pdo, 'safety_tours');
+
+// Prepare data for database insertion
+$tourData = [
+    'tour_date'      => $tourDate,                                              // UK formatted date/time
+    'site'           => $siteName,                                              // Project name
+    'area'           => $areaLocation,                                          // Location/area
+    'lead_name'      => $leadName,                                              // Site manager name
+    'participants'   => $participantsList,                                     // Other participants
+    'responses'      => json_encode($tourResponses, JSON_UNESCAPED_UNICODE),   // All question responses
+    'photos'         => json_encode($generalPhotos, JSON_UNESCAPED_UNICODE),   // General photos
+    'signature_path' => $signaturePath,                                        // Signature file path
+    'status'         => 'Open',                                                // Default status
+    'score_achieved' => $scoreAchieved,                                        // Points achieved
+    'score_total'    => $scoreTotal,                                           // Total possible points
+    'score_percent'  => $scorePercent,                                         // Percentage score
+    'recipients'     => $emailRecipients ? implode(',', $emailRecipients) : null, // Email list
 ];
 
-// filter by existing columns
-$insCols = [];
-$insMarks= [];
-$insArgs = [];
-foreach ($data as $k => $v) {
-  if (in_array($k, $cols, true)) {
-    $insCols[]  = "`$k`";
-    $insMarks[] = "?";
-    $insArgs[]  = $v;
-  }
+// Build dynamic INSERT query using only existing columns
+$insertColumns = [];
+$insertPlaceholders = [];
+$insertValues = [];
+
+foreach ($tourData as $columnName => $value) {
+    if (in_array($columnName, $availableColumns, true)) {
+        $insertColumns[] = "`{$columnName}`";
+        $insertPlaceholders[] = "?";
+        $insertValues[] = $value;
+    }
 }
-$sql = "INSERT INTO `safety_tours` (".implode(',', $insCols).") VALUES (".implode(',', $insMarks).")";
-$st  = $pdo->prepare($sql);
-$st->execute($insArgs);
-$id = (int)$pdo->lastInsertId();
+
+// Execute database insertion
+$insertSql = "INSERT INTO `safety_tours` (" . implode(',', $insertColumns) . ") 
+              VALUES (" . implode(',', $insertPlaceholders) . ")";
+$insertStatement = $pdo->prepare($insertSql);
+$insertStatement->execute($insertValues);
+
+// Get the ID of the newly created tour record
+$tourId = (int)$pdo->lastInsertId();
 
 /* -------------------------------------------------------
    Save/refresh recipient directory (table: safety_recipient_emails)
