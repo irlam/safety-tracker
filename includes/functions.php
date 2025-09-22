@@ -1,4 +1,7 @@
 <?php
+// File: includes/functions.php
+// Description: Core helper functions for the Safety Tour app. Includes DB access, file uploads, mail, PDF rendering, and other utilities. All times in UK format. Fully commented for maintainability by non-coders.
+
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
@@ -21,7 +24,7 @@ if (!class_exists('PHPMailer\PHPMailer\PHPMailer')) {
 function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 
 /**
- * Handy for /upload_diag.php — shows PHP’s effective upload/post limits.
+ * Shows PHP’s effective upload/post limits.
  */
 function upload_limits_info(): array {
   $toBytes = function(string $v): int {
@@ -77,7 +80,7 @@ function db(): PDO {
 // ============================================================================
 /**
  * Save a single uploaded file to /uploads/<folder>.
- * Returns a **web-relative** path (so browser & FPDF can resolve it).
+ * Returns a web-relative path (so browser & FPDF can resolve it).
  */
 function save_file(array $file, string $folder): ?string {
   if (empty($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) return null;
@@ -97,7 +100,7 @@ function save_file(array $file, string $folder): ?string {
 }
 
 /**
- * Save a **matrix** of per-question images:
+ * Save a matrix of per-question images
  * expects inputs like: <input type="file" name="qphotos[INDEX][]" multiple>
  * Returns: [ index => ['uploads/tours/q-<tourId>/file1.jpg', ...], ... ]
  */
@@ -331,7 +334,9 @@ function render_pdf(array $tour, string $outPath): void {
   $responses = json_arr($tour['responses'] ?? null);
   if ($responses) {
     $sc = tally_score($responses);
-    if ($sc['percent'] !== null) $scoreTxt = ' — Score '.number_format($sc['percent'],2).'%';
+    if ($sc['percent'] !== null) {
+      $scoreTxt = ' — Score '.number_format($sc['percent'],2).'%';
+    }
   }
   $pdf->Cell(0,6,pdf_text('Generated '.date('d/m/Y H:i').' (UK)'.$scoreTxt),0,1,'R');
   $pdf->Ln(3);
