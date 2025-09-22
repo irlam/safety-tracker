@@ -1,59 +1,123 @@
 <?php
-// /audit.php — Safety audit log (UK time, nicer Details cell)
-// Auth optional-safe
-$auth = __DIR__ . '/includes/auth.php';
-if (is_file($auth)) {
-  require_once $auth;
-  if (function_exists('auth_check')) auth_check(true); // admin-only page; change to false if you want public
-}
+/**
+ * File: audit.php
+ * 
+ * Safety Audit Log Viewer
+ * 
+ * This file provides a comprehensive audit trail for the Safety Tracker system.
+ * It displays:
+ * - All system events (tour creation, updates, deletions, etc.)
+ * - User actions and authentication events
+ * - PDF generation and email sending activities
+ * - Search and filtering capabilities by date range, event type, and keywords
+ * - All timestamps displayed in UK format (dd/mm/yyyy HH:MM)
+ * 
+ * The page includes filtering options and displays up to 1000 records at once.
+ * This is typically an admin-only page for system monitoring and troubleshooting.
+ */
 
-require_once __DIR__ . '/includes/functions.php'; // <-- provides h()
+declare(strict_types=1);
+
+// Set UK timezone for consistent date/time display
 date_default_timezone_set('Europe/London');
 
-// Optional nav
-$nav = __DIR__ . '/includes/nav.php';
+// Optional authentication - typically admin-only access
+$authPath = __DIR__ . '/includes/auth.php';
+if (is_file($authPath)) {
+    require_once $authPath;
+    if (function_exists('auth_check')) {
+        // Set to true for admin-only, false for public access
+        auth_check(true); 
+    }
+}
+
+// Load core functions for database access and HTML escaping
+require_once __DIR__ . '/includes/functions.php';
+
+// Load and render navigation if available
+$navigationPath = __DIR__ . '/includes/nav.php';
 ob_start();
-if (is_file($nav)) {
-  require_once $nav;
-  if (function_exists('render_nav')) render_nav('audit');
+if (is_file($navigationPath)) {
+    require_once $navigationPath;
+    if (function_exists('render_nav')) {
+        render_nav('audit');
+    }
 }
-$navHtml = ob_get_clean();
+$navigationHtml = ob_get_clean();
 
-$pdo = db();
+// Establish database connection
+$database = db();
 
-/* ------------ Filters ------------- */
-$from   = trim($_GET['from']   ?? '');
-$to     = trim($_GET['to']     ?? '');
-$event  = trim($_GET['event']  ?? '');  // create, update, close_action, reopen_action, delete_tour, email_sent, pdf_built, etc.
-$q      = trim($_GET['q']      ?? '');  // search in details/actor/ip
-$limit  = max(50, min(1000, (int)($_GET['limit'] ?? 500)));
+/**
+ * =============================================================================
+ * AUDIT LOG FILTERING
+ * =============================================================================
+ * Extract and process filter parameters from GET request
+ */
 
-$where=[]; $args=[];
-if ($from !== '') { $where[]='event_time >= ?'; $args[] = date('Y-m-d 00:00:00', strtotime($from)); }
-if ($to   !== '') { $where[]='event_time <= ?'; $args[] = date('Y-m-d 23:59:59', strtotime($to)); }
-if ($event !== '') { $where[]='event = ?'; $args[] = $event; }
-if ($q !== '') {
-  $where[]='(details LIKE ? OR actor LIKE ? OR ip LIKE ?)';
-  $args[]="%$q%"; $args[]="%$q%"; $args[]="%$q%";
+// Filter parameters from query string
+$dateFrom = trim($_GET['from'] ?? '');    // Start date filter
+$dateTo = trim($_GET['to'] ?? '');        // End date filter  
+$eventType = trim($_GET['event'] ?? '');  // Event type (create, update, delete, etc.)
+$searchQuery = trim($_GET['q'] ?? '');    // General search in details/actor/IP
+$recordLimit = max(50, min(1000, (int)($_GET['limit'] ?? 500))); // Records per page
+
+// Build WHERE clause conditions and parameters
+$whereConditions = [];
+$queryParameters = [];
+
+// Date range filtering
+if ($dateFrom !== '') { 
+    $whereConditions[] = 'event_time >= ?'; 
+    $queryParameters[] = date('Y-m-d 00:00:00', strtotime($dateFrom)); 
 }
-$whereSql = $where ? 'WHERE '.implode(' AND ', $where) : '';
+if ($dateTo !== '') { 
+    $whereConditions[] = 'event_time <= ?'; 
+    $queryParameters[] = date('Y-m-d 23:59:59', strtotime($dateTo)); 
+}
 
-/* ------------ Query ------------- */
-$sql = "
-  SELECT id, event_time, event, tour_id, action_id, actor,
-         `action`, entity_type, entity_id, details, ip, created_at
-  FROM safety_audit_log
-  $whereSql
-  ORDER BY id DESC
-  LIMIT $limit
+// Event type filtering
+if ($eventType !== '') { 
+    $whereConditions[] = 'event = ?'; 
+    $queryParameters[] = $eventType; 
+}
+
+// General search in multiple fields
+if ($searchQuery !== '') {
+    $whereConditions[] = '(details LIKE ? OR actor LIKE ? OR ip LIKE ?)';
+    $queryParameters[] = "%$searchQuery%";
+    $queryParameters[] = "%$searchQuery%"; 
+    $queryParameters[] = "%$searchQuery%";
+}
+
+// Construct final WHERE clause
+$whereClause = $whereConditions ? 'WHERE ' . implode(' AND ', $whereConditions) : '';
+
+/**
+ * =============================================================================
+ * DATABASE QUERY EXECUTION
+ * =============================================================================
+ * Execute audit log query with filtering and error handling
+ */
+
+$auditQuery = "
+    SELECT id, event_time, event, tour_id, action_id, actor,
+           `action`, entity_type, entity_id, details, ip, created_at
+    FROM safety_audit_log
+    $whereClause
+    ORDER BY id DESC
+    LIMIT $recordLimit
 ";
-$rows=[]; $err='';
+
+$auditRecords = [];
+$queryError = '';
+
 try {
-  $st = $pdo->prepare($sql);
-  $st->execute($args);
-  $rows = $st->fetchAll();
+    $statement = $database->prepare($auditQuery);
+    $statement->execute($queryParameters);
+    $auditRecords = $statement->fetchAll();
 } catch (Throwable $e) {
-  $err = $e->getMessage();
+    $queryError = $e->getMessage();
 }
 
 /* ------------ HTML ------------- */
@@ -147,9 +211,9 @@ try {
         <th>Details</th>
         <th>IP</th>
       </tr>
-      <?php if (!$rows): ?>
+      <?php if (!$auditRecords): ?>
         <tr><td colspan="9" class="muted">No entries.</td></tr>
-      <?php else: foreach ($rows as $r): ?>
+      <?php else: foreach ($auditRecords as $r): ?>
         <tr>
           <td><?= (int)$r['id'] ?></td>
           <td><?= h(date('d/m/Y H:i', strtotime($r['event_time'] ?? $r['created_at'] ?? 'now'))) ?></td>
