@@ -1,6 +1,6 @@
 <?php
 // File: submit.php
-// Description: Processes and saves a submitted Site Safety Tour form, handles file uploads (including per-question photos and signatures), generates a PDF report, sends notification emails, and redirects to a success page. All times/dates in UK format. Code is fully commented and modernised for maintainability by non-coders.
+// Description: Processes and saves a submitted Site Safety Tour form, handles file uploads (including per-question photos and signatures), generates a PDF report, sends notification emails, and redirects to the success page. Fully modern, commented, and all dates/times are UK format.
 
 declare(strict_types=1);
 
@@ -129,7 +129,7 @@ if (!$signature_path) {
 /* ---------------------------------
    7. Handle file uploads for questions and extra
 ----------------------------------*/
-// Per-question matrix (qphotos[index][]
+// Per-question matrix (qphotos[index][
 $qImages = []; // index => [paths...]
 if (!empty($_FILES['qphotos']['name']) && is_array($_FILES['qphotos']['name'])) {
     foreach ($_FILES['qphotos']['name'] as $idx => $names) {
