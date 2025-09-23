@@ -129,7 +129,7 @@ if (!$signature_path) {
 /* ---------------------------------
    7. Handle file uploads for questions and extra
 ----------------------------------*/
-// Per-question matrix (qphotos[index][
+// Per-question matrix (qphotos[index][])
 $qImages = []; // index => [paths...]
 if (!empty($_FILES['qphotos']['name']) && is_array($_FILES['qphotos']['name'])) {
     foreach ($_FILES['qphotos']['name'] as $idx => $names) {
@@ -222,7 +222,7 @@ $data = [
     'score_total'    => $score_total,
     'score_percent'  => $score_percent,
     'recipients'     => $recipients ? implode(',', $recipients) : null,
-};
+];
 // Only insert columns that exist in the DB
 $insCols = [];
 $insMarks= [];

@@ -16,7 +16,7 @@ $ok_mail = ((int)($_GET['mail'] ?? 0)) === 1;
 $hadErr  = ((int)($_GET['error']?? 0)) === 1;
 
 // Fetch tour details if an ID is given
-tour = null;
+$tour = null;
 if ($id > 0) {
     $st = db()->prepare('SELECT id, site, area, lead_name, tour_date FROM safety_tours WHERE id=?');
     $st->execute([$id]);

@@ -2,7 +2,7 @@
 // File: dashboard.php
 // Description: Main dashboard for Safety Tours. Lists, filters, and visualizes tours; provides statistics, a sparkline graph, and access to edit/PDF/delete. Features modern design, UK date/time format, and code comments for non-coders and maintainers.
 
-y$auth = __DIR__ . '/includes/auth.php';
+$auth = __DIR__ . '/includes/auth.php';
 if (is_file($auth)) {
     require_once $auth;
     if (function_exists('auth_check')) {
@@ -61,7 +61,7 @@ try {
     $rows = $stmt->fetchAll();
 } catch (Throwable $e) { $rows = []; }
 
-totalTours = 0;
+$totalTours = 0;
 $openCount  = 0;
 $closedCount= 0;
 $avgScore   = null;
