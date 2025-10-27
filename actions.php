@@ -1,6 +1,5 @@
 <?php
-// actions.php — Actions register (view, filter, close/reopen)
-// ---------------------------------------------------------
+// actions.php — Actions register (view, filter, close/reopen + recipients + view link)
 
 // auth (optional-safe)
 $auth = __DIR__ . '/includes/auth.php';
@@ -12,80 +11,82 @@ if (is_file($auth)) {
 require_once __DIR__ . '/includes/functions.php';
 date_default_timezone_set('Europe/London');
 
-// safe escape helper (if not already available)
+// safe escape helper (only if not already defined in your includes)
 if (!function_exists('h')) {
   function h($v){ return htmlspecialchars((string)$v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 }
 
-// DB
 $pdo = db();
 
-// are we admin? (only if auth defines it)
-$isAdmin = function_exists('auth_is_admin') ? (bool)auth_is_admin() : false;
+// admin?
+$isAdmin = false;
+if (function_exists('auth_is_admin')) { $isAdmin = (bool)auth_is_admin(); }
+elseif (function_exists('is_admin'))  { $isAdmin = (bool)is_admin(); }
 
-/* ----------------------------------------
- * detect column name: priority vs severity
- * --------------------------------------*/
-$prioCol = 'priority';
-try {
-  $hasPriority = (bool)$pdo->query("SHOW COLUMNS FROM `safety_actions` LIKE 'priority'")->fetch();
-  $hasSeverity = (bool)$pdo->query("SHOW COLUMNS FROM `safety_actions` LIKE 'severity'")->fetch();
-  if (!$hasPriority && $hasSeverity) $prioCol = 'severity';
-} catch (Throwable $e) {
-  // ignore, default stays as 'priority'
-}
-
-/* -------------
- * filter inputs
- * ----------- */
+// ------------------------------
+// Filters
+// ------------------------------
 $q      = trim((string)($_GET['q']      ?? ''));
-$status =        (string)($_GET['status'] ?? 'Open');   // Open | Closed | Any
-$due    =        (string)($_GET['due']    ?? 'Any');    // Any | Overdue | Today | 7days
+$status = (string)($_GET['status'] ?? 'Open');   // Open | Closed | Any
+$due    = (string)($_GET['due']    ?? 'Any');    // Any | Overdue | Today | 7days
 
 $where = [];
 $args  = [];
 
-if ($status === 'Open' || $status === 'Closed') { $where[] = "`a`.`status` = ?"; $args[] = $status; }
+if ($status === 'Open' || $status === 'Closed') {
+  $where[] = "a.status = ?";
+  $args[]  = $status;
+}
+
 if ($q !== '') {
-  $where[] = "(`t`.`site` LIKE ? OR `t`.`area` LIKE ? OR `a`.`action` LIKE ? OR `a`.`responsible` LIKE ?)";
+  $where[] = "(t.site LIKE ? OR t.area LIKE ? OR a.action LIKE ? OR a.responsible LIKE ?)";
   array_push($args, "%$q%", "%$q%", "%$q%", "%$q%");
 }
+
 if ($due === 'Overdue') {
-  $where[] = "`a`.`status`='Open' AND `a`.`due_date` IS NOT NULL AND `a`.`due_date` < CURDATE()";
+  $where[] = "a.status='Open' AND a.due_date IS NOT NULL AND a.due_date < CURDATE()";
 } elseif ($due === 'Today') {
-  $where[] = "`a`.`due_date` = CURDATE()";
+  $where[] = "a.due_date = CURDATE()";
 } elseif ($due === '7days') {
-  $where[] = "`a`.`due_date` BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)";
+  $where[] = "a.due_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)";
 }
-$whereSql = $where ? 'WHERE '.implode(' AND ', $where) : '';
 
-/* ------------
- * quick stats
- * ----------*/
-$tot     = (int)$pdo->query("SELECT COUNT(*) FROM `safety_actions`")->fetchColumn();
-$open    = (int)$pdo->query("SELECT COUNT(*) FROM `safety_actions` WHERE `status`='Open'")->fetchColumn();
-$closed  = (int)$pdo->query("SELECT COUNT(*) FROM `safety_actions` WHERE `status`='Closed'")->fetchColumn();
-$overdue = (int)$pdo->query("SELECT COUNT(*) FROM `safety_actions` WHERE `status`='Open' AND `due_date` IS NOT NULL AND `due_date` < CURDATE()")->fetchColumn();
+$whereSql = $where ? ('WHERE '.implode(' AND ', $where)) : '';
 
-/* -----------
- * main query
- * ---------*/
+// ------------------------------
+// Quick stats
+// ------------------------------
+try {
+  $tot     = (int)$pdo->query("SELECT COUNT(*) FROM safety_actions")->fetchColumn();
+  $open    = (int)$pdo->query("SELECT COUNT(*) FROM safety_actions WHERE status='Open'")->fetchColumn();
+  $closed  = (int)$pdo->query("SELECT COUNT(*) FROM safety_actions WHERE status='Closed'")->fetchColumn();
+  $overdue = (int)$pdo->query("SELECT COUNT(*) FROM safety_actions WHERE status='Open' AND due_date IS NOT NULL AND due_date<CURDATE()")->fetchColumn();
+} catch (Throwable $e) {
+  $tot=$open=$closed=$overdue=0;
+}
+
+// ------------------------------
+// Main list
+// - priority/severity tolerant
+// - include t.recipients for "Emailed to"
+// ------------------------------
 $sql = "
   SELECT
-    `a`.`id`,
-    `a`.`tour_id`,
-    `a`.`action`,
-    `a`.`responsible`,
-    `a`.`due_date`,
-    `a`.`status`,
-    `a`.`$prioCol` AS `priority`,
-    `t`.`site`,
-    `t`.`area`,
-    `t`.`tour_date`
-  FROM `safety_actions` AS `a`
-  LEFT JOIN `safety_tours`  AS `t` ON `t`.`id` = `a`.`tour_id`
+    a.id,
+    a.tour_id,
+    a.action,
+    a.responsible,
+    a.due_date,
+    a.status,
+    COALESCE(a.priority, a.severity) AS priority,
+    t.site,
+    t.area,
+    t.tour_date,
+    t.recipients
+  FROM safety_actions AS a
+  LEFT JOIN safety_tours  AS t ON t.id = a.tour_id
   $whereSql
-  ORDER BY `a`.`id` DESC
+  ORDER BY a.id DESC
   LIMIT 500
 ";
 
@@ -99,7 +100,7 @@ try {
   $lastSqlError = $e->getMessage();
 }
 
-// Keep a back link with filters when navigating into Close/Reopen
+// keep back url with filters
 $back = 'actions.php';
 if (!empty($_SERVER['QUERY_STRING'])) $back .= '?'.$_SERVER['QUERY_STRING'];
 ?>
@@ -122,14 +123,12 @@ if (!empty($_SERVER['QUERY_STRING'])) $back .= '?'.$_SERVER['QUERY_STRING'];
   .wrap{max-width:1200px;margin:0 auto;padding:18px}
   h1{font-size:2rem;margin:0 0 14px}
 
-  /* cards */
   .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
   @media (max-width:980px){.grid{grid-template-columns:repeat(2,1fr)}}
   @media (max-width:560px){.grid{grid-template-columns:1fr}}
   .card{background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));border:1px solid var(--border);border-radius:var(--radius);padding:14px}
   .big{font-size:2.2rem;font-weight:800}
 
-  /* filters */
   .filters{margin:14px 0}
   .fgrid{display:grid;grid-template-columns:1fr 220px 220px 140px 110px; gap:12px}
   @media (max-width:1000px){.fgrid{grid-template-columns:1fr 1fr}}
@@ -139,7 +138,6 @@ if (!empty($_SERVER['QUERY_STRING'])) $back .= '?'.$_SERVER['QUERY_STRING'];
   .btn{background:linear-gradient(180deg,var(--g1),var(--g2));border:0;border-radius:14px;color:#00131a;font-weight:800;padding:12px 16px;cursor:pointer}
   .btn-ghost{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));color:#d1d5db;border:1px solid var(--border);border-radius:14px;padding:12px 16px;text-decoration:none;display:inline-block;text-align:center}
 
-  /* table */
   table{width:100%;border-collapse:collapse}
   th,td{border:1px solid var(--border);padding:10px;vertical-align:top}
   th{background:#0f172a;text-align:left}
@@ -149,7 +147,7 @@ if (!empty($_SERVER['QUERY_STRING'])) $back .= '?'.$_SERVER['QUERY_STRING'];
   .badge{display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid var(--border)}
   .low{background:#064e3b;color:#d1fae5}
   .med{background:#3f2e00;color:#fde68a}
-  .hi{background:#3b0a0a;color:#fecaca}
+  .hi{ background:#3b0a0a;color:#fecaca}
 
   .actbtn{display:inline-block;padding:8px 12px;border-radius:12px;text-decoration:none;border:1px solid var(--border);background:#0b1220;color:#e5e7eb}
   .close{background:linear-gradient(180deg,#16a34a,#15803d);color:#00130b}
@@ -164,10 +162,10 @@ if (!empty($_SERVER['QUERY_STRING'])) $back .= '?'.$_SERVER['QUERY_STRING'];
 
   <!-- Stat cards -->
   <section class="grid">
-    <div class="card"><div>Total Actions</div><div class="big"><?= (int)$tot ?></div></div>
-    <div class="card"><div>Open</div><div class="big"><?= (int)$open ?></div></div>
-    <div class="card"><div>Overdue</div><div class="big"><?= (int)$overdue ?></div></div>
-    <div class="card"><div>Closed</div><div class="big"><?= (int)$closed ?></div></div>
+    <div class="card"><div>Total Actions</div><div class="big"><?= (int)($tot ?? 0) ?></div></div>
+    <div class="card"><div>Open</div><div class="big"><?= (int)($open ?? 0) ?></div></div>
+    <div class="card"><div>Overdue</div><div class="big"><?= (int)($overdue ?? 0) ?></div></div>
+    <div class="card"><div>Closed</div><div class="big"><?= (int)($closed ?? 0) ?></div></div>
   </section>
 
   <!-- Filters -->
@@ -221,19 +219,24 @@ if (!empty($_SERVER['QUERY_STRING'])) $back .= '?'.$_SERVER['QUERY_STRING'];
         <th>Due</th>
         <th>Status</th>
         <th>Priority</th>
+        <th>Emailed to</th>
+        <th>View</th>
         <th><?= $isAdmin ? 'Close' : 'Close (Admin)' ?></th>
       </tr>
 
       <?php if (!$rows): ?>
-        <tr><td colspan="9" class="muted">No actions match your filters.</td></tr>
+        <tr><td colspan="11" class="muted">No actions match your filters.</td></tr>
       <?php else: foreach ($rows as $r): ?>
         <?php
-          $prio = strtolower((string)($r['priority'] ?? ''));
-          $cls  = $prio==='high' ? 'hi' : ($prio==='medium' ? 'med' : ($prio==='low' ? 'low' : ''));
-          $isClosed = ($r['status'] === 'Closed');
-          $link = 'action_close.php?id='.(int)$r['id'].'&back='.rawurlencode($back);
-          $siteArea = trim(($r['site'] ?? '').(($r['area'] ?? '') ? ' / '.$r['area'] : ''));
-          $dueDisp = $r['due_date'] ? date('Y-m-d', strtotime($r['due_date'])) : '—';
+          $prioRaw = (string)($r['priority'] ?? '');
+          $prio    = strtolower($prioRaw);
+          $cls     = $prio==='high' ? 'hi' : ($prio==='medium' ? 'med' : ($prio==='low' ? 'low' : ''));
+          $isClosed= ($r['status'] === 'Closed');
+          $linkClose = 'action_close.php?id='.(int)$r['id'].'&back='.rawurlencode($back);
+          $linkView  = 'action_view.php?id='.(int)$r['id'].'&back='.rawurlencode($back);
+          $siteArea  = trim(($r['site'] ?? '').(($r['area'] ?? '') ? ' / '.$r['area'] : ''));
+          $dueDisp   = $r['due_date'] ? date('d/m/Y', strtotime($r['due_date'])) : '—';  // UK
+          $emailedTo = trim((string)($r['recipients'] ?? ''));
         ?>
         <tr>
           <td><?= (int)$r['id'] ?></td>
@@ -243,10 +246,12 @@ if (!empty($_SERVER['QUERY_STRING'])) $back .= '?'.$_SERVER['QUERY_STRING'];
           <td><?= h($r['responsible'] ?? '') ?></td>
           <td><?= h($dueDisp) ?></td>
           <td><?= h($r['status']) ?></td>
-          <td><span class="badge <?= $cls ?>"><?= $r['priority'] ? h($r['priority']) : '—' ?></span></td>
+          <td><span class="badge <?= $cls ?>"><?= $prioRaw !== '' ? h($prioRaw) : '—' ?></span></td>
+          <td><?= $emailedTo !== '' ? h($emailedTo) : '<span class="muted">—</span>' ?></td>
+          <td><a class="actbtn" href="<?= h($linkView) ?>">View</a></td>
           <td>
             <?php if ($isAdmin): ?>
-              <a class="actbtn <?= $isClosed ? 'reopen' : 'close' ?>" href="<?= h($link) ?>">
+              <a class="actbtn <?= $isClosed ? 'reopen' : 'close' ?>" href="<?= h($linkClose) ?>">
                 <?= $isClosed ? 'Reopen' : 'Close' ?>
               </a>
             <?php else: ?>

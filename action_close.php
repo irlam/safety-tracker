@@ -1,133 +1,207 @@
 <?php
-// action_close.php — close/view a single action
-// auth (optional-safe)
-$auth = __DIR__ . '/includes/auth.php';
-if (is_file($auth)) {
-    require_once $auth;
-    if (function_exists('auth_check')) {
-        auth_check();           // or: auth_check(true); // if this page is admin-only
-    }
-}
+// /action_close.php — close or reopen an action, optional email to tour recipients
+declare(strict_types=1);
+
+require_once __DIR__ . '/includes/auth.php';       // safe if present
 require_once __DIR__ . '/includes/functions.php';
-require_once __DIR__ . '/includes/nav.php';
-render_nav('actions');
 
-$id = (int)($_GET['id'] ?? 0);
-if ($id <= 0) { header('Location: actions.php'); exit; }
+date_default_timezone_set('Europe/London');
 
-// Load
-$st = db()->prepare("SELECT a.*, t.site, t.area, t.lead_name, t.tour_date FROM safety_actions a JOIN safety_tours t ON t.id=a.tour_id WHERE a.id=?");
-$st->execute([$id]); $row = $st->fetch();
-if (!$row) { header('Location: actions.php'); exit; }
+// Optional auth gate (uncomment if you want to restrict to logged-in users)
+// if (function_exists('auth_check')) auth_check(true);
 
+$pdo  = db();
+$back = trim((string)($_REQUEST['back'] ?? 'actions.php'));
+if ($back === '') $back = 'actions.php';
+
+// tiny helpers
+function h(string $v): string { return htmlspecialchars($v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+function is_admin_safe(): bool {
+  if (function_exists('auth_is_admin')) return (bool)auth_is_admin();
+  if (function_exists('is_admin'))      return (bool)is_admin();
+  return true; // if no auth system, allow
+}
+function actor_email(): ?string {
+  if (function_exists('auth_user')) { $u = auth_user(); return $u['email'] ?? null; }
+  return null;
+}
+
+/* -------------------------------------------
+ * REOPEN (GET /action_close.php?id=..&reopen=1)
+ * -----------------------------------------*/
+if (isset($_GET['reopen'])) {
+  $id = (int)($_GET['id'] ?? 0);
+  if ($id <= 0) { header('Location: '.$back); exit; }
+  if (!is_admin_safe()) { http_response_code(403); echo 'Forbidden'; exit; }
+
+  try {
+    $st = $pdo->prepare("UPDATE safety_actions SET status='Open', closed_by=NULL, closed_at=NULL WHERE id=?");
+    $st->execute([$id]);
+
+    // audit (best effort)
+    try {
+      $pdo->exec("CREATE TABLE IF NOT EXISTS safety_audit_log (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        event_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        event ENUM('create','update','close_action','reopen_action','delete_tour') NOT NULL,
+        tour_id INT NULL, action_id INT NULL,
+        actor VARCHAR(120) NULL, action VARCHAR(80) NOT NULL,
+        entity_type VARCHAR(80) NULL, entity_id INT NULL,
+        details TEXT NULL, ip VARCHAR(64) NULL,
+        created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+      $ins = $pdo->prepare("INSERT INTO safety_audit_log (event, action_id, actor, action, entity_type, entity_id, ip, details)
+                            VALUES ('reopen_action',?,?,?,?,?, ?,?)");
+      $ins->execute([$id, actor_email(), 'reopen', 'action', $id, $_SERVER['REMOTE_ADDR'] ?? null, null]);
+    } catch (Throwable $e) { /* ignore */ }
+
+  } catch (Throwable $e) {
+    error_log('REOPEN ERR: '.$e->getMessage());
+  }
+  header('Location: '.$back);
+  exit;
+}
+
+/* -------------------------------------------
+ * CLOSE (POST from action_view.php)
+ * -----------------------------------------*/
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  $close_note = trim($_POST['close_note'] ?? '');
-  $closed_by  = trim($_POST['closed_by'] ?? '');
-  $photos     = json_decode($row['close_photos'] ?: '[]', true) ?: [];
+  if (!is_admin_safe()) { http_response_code(403); echo 'Forbidden'; exit; }
 
-  if (!empty($_FILES['photos']['name'][0])) {
-    foreach ($_FILES['photos']['name'] as $i => $name) {
+  $id           = (int)($_POST['id'] ?? 0);
+  $close_note   = trim((string)($_POST['close_note'] ?? ''));
+  $email_opt_in = isset($_POST['email_recipients']) && $_POST['email_recipients'] == '1';
+
+  if ($id <= 0) { header('Location: '.$back); exit; }
+
+  // fetch action + tour (recipients, site, etc.)
+  $action = null; $tour = null;
+  try {
+    $st = $pdo->prepare("SELECT * FROM safety_actions WHERE id=?");
+    $st->execute([$id]);
+    $action = $st->fetch();
+
+    if ($action) {
+      $st2 = $pdo->prepare("SELECT id, site, area, lead_name, recipients FROM safety_tours WHERE id=?");
+      $st2->execute([(int)$action['tour_id']]);
+      $tour = $st2->fetch();
+    }
+  } catch (Throwable $e) {
+    error_log('FETCH ERR: '.$e->getMessage());
+  }
+
+  // collect closure photos
+  $newPhotos = [];
+  if (!empty($_FILES['close_photos']['name'][0])) {
+    foreach ($_FILES['close_photos']['name'] as $i => $nm) {
       $tmp = [
-        'name' => $_FILES['photos']['name'][$i],
-        'type' => $_FILES['photos']['type'][$i],
-        'tmp_name' => $_FILES['photos']['tmp_name'][$i],
-        'error' => $_FILES['photos']['error'][$i],
-        'size' => $_FILES['photos']['size'][$i],
+        'name'     => $_FILES['close_photos']['name'][$i] ?? '',
+        'type'     => $_FILES['close_photos']['type'][$i] ?? '',
+        'tmp_name' => $_FILES['close_photos']['tmp_name'][$i] ?? '',
+        'error'    => $_FILES['close_photos']['error'][$i] ?? 4,
+        'size'     => $_FILES['close_photos']['size'][$i] ?? 0,
       ];
-      $rel = save_file($tmp, 'action_closeouts'); if ($rel) $photos[] = $rel;
+      $rel = save_file($tmp, 'closures');
+      if ($rel) $newPhotos[] = $rel;
+    }
+  }
+  // merge with existing close_photos (JSON)
+  $allPhotos = $newPhotos;
+  try {
+    if (!empty($action['close_photos'])) {
+      $old = json_decode((string)$action['close_photos'], true);
+      if (is_array($old) && $old) $allPhotos = array_values(array_merge($old, $newPhotos));
+    }
+  } catch (Throwable $e) {}
+
+  // update to Closed
+  try {
+    $st = $pdo->prepare("UPDATE safety_actions
+      SET status='Closed',
+          close_note=:note,
+          close_photos=:photos,
+          closed_by=:by,
+          closed_at=NOW()
+      WHERE id=:id");
+    $st->execute([
+      ':note'   => $close_note !== '' ? $close_note : null,
+      ':photos' => $allPhotos ? json_encode($allPhotos, JSON_UNESCAPED_UNICODE) : null,
+      ':by'     => actor_email(),
+      ':id'     => $id,
+    ]);
+
+    // audit (best effort)
+    try {
+      $pdo->exec("CREATE TABLE IF NOT EXISTS safety_audit_log (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        event_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        event ENUM('create','update','close_action','reopen_action','delete_tour') NOT NULL,
+        tour_id INT NULL, action_id INT NULL,
+        actor VARCHAR(120) NULL, action VARCHAR(80) NOT NULL,
+        entity_type VARCHAR(80) NULL, entity_id INT NULL,
+        details TEXT NULL, ip VARCHAR(64) NULL,
+        created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+      $ins = $pdo->prepare("INSERT INTO safety_audit_log (event, tour_id, action_id, actor, action, entity_type, entity_id, ip, details)
+                            VALUES ('close_action',?,?,?,?,?, ?,?,?)");
+      $ins->execute([
+        (int)($action['tour_id'] ?? 0),
+        $id,
+        actor_email(),
+        'close',
+        'action',
+        $id,
+        $_SERVER['REMOTE_ADDR'] ?? null,
+        $close_note ?: null
+      ]);
+    } catch (Throwable $e) { /* ignore */ }
+
+  } catch (Throwable $e) {
+    error_log('CLOSE ERR: '.$e->getMessage());
+    header('Location: '.$back);
+    exit;
+  }
+
+  /* -------------------------------------------
+   * Optional email to tour recipients
+   * -----------------------------------------*/
+  if ($email_opt_in && $tour) {
+    $listRaw = (string)($tour['recipients'] ?? '');
+    // split by comma/semicolon/newline
+    $addresses = array_values(array_filter(array_map(
+      fn($x)=>trim(strtolower($x)),
+      preg_split('/[,\;\n]+/', $listRaw) ?: []
+    )));
+    // De-dupe basic
+    $addresses = array_values(array_unique($addresses));
+
+    if ($addresses) {
+      // compose email
+      $siteArea = trim(($tour['site'] ?? '').(empty($tour['area']) ? '' : ' / '.$tour['area']));
+      $subject  = 'Action closed — Tour #'.(int)$tour['id'].' ('.$siteArea.')';
+      $linkView = (isset($_SERVER['HTTP_HOST']) ? (($_SERVER['REQUEST_SCHEME'] ?? 'https').'://'.$_SERVER['HTTP_HOST']) : '').'/action_view.php?id='.$id;
+      $who      = actor_email() ?: 'System';
+      $bodyHtml = '<p>Hello,</p>'
+        .'<p>An action from Safety Tour <strong>#'.(int)$tour['id'].'</strong> ('.h($siteArea).') has been <strong>closed</strong>.</p>'
+        .'<p><strong>Action:</strong> '.h((string)($action['action'] ?? '')).'<br>'
+        .'<strong>Responsible:</strong> '.h((string)($action['responsible'] ?? '')).'<br>'
+        .'<strong>Due:</strong> '.h((string)($action['due_date'] ?? '')).'</p>'
+        .($close_note !== '' ? '<p><strong>Closure note:</strong><br>'.nl2br(h($close_note)).'</p>' : '')
+        .'<p>Closed by: '.h($who).' at '.h(date('d/m/Y H:i')).'</p>'
+        .'<p><a href="'.h($linkView).'">View action</a></p>';
+
+      // send one by one (PHPMailer will be set up in send_mail)
+      foreach ($addresses as $to) {
+        // minimal email sanity
+        if (!preg_match('/^[^@\s]+@[^@\s]+\.[^@\s]+$/', $to)) continue;
+        try { send_mail($to, $subject, $bodyHtml, []); } catch (Throwable $e) { /* ignore */ }
+      }
     }
   }
 
-  $stmt = db()->prepare("UPDATE safety_actions SET status='Closed', close_note=?, close_photos=?, closed_by=?, closed_at=NOW() WHERE id=?");
-  $stmt->execute([$close_note, json_encode($photos, JSON_UNESCAPED_UNICODE), $closed_by ?: $row['responsible'], $id]);
-
-  // Rebuild tour PDF so close-outs appear
-  $tour = db()->prepare('SELECT * FROM safety_tours WHERE id=?'); $tour->execute([(int)$row['tour_id']]); $tour = $tour->fetch();
-  if ($tour) {
-    $pdfPath = __DIR__ . '/uploads/tours/tour-'.$tour['id'].'.pdf';
-    if (!is_dir(dirname($pdfPath))) mkdir(dirname($pdfPath), 0775, true);
-    try { render_pdf($tour, $pdfPath); } catch (Throwable $e) { error_log('PDF: '.$e->getMessage()); }
-  }
-
-  // Optional: email the lead when closed (uncomment to auto):
-  // send_mail_multi([SMTP_USER], 'Action closed — Tour #'.$row['tour_id'], '<p>Action closed: '.htmlspecialchars($row['action']).'</p>');
-
-  header('Location: action_close.php?id='.$id.'&saved=1'); exit;
+  header('Location: '.$back);
+  exit;
 }
 
-$closedPhotos = json_decode($row['close_photos'] ?: '[]', true) ?: [];
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Close Action #<?= (int)$id ?></title>
-<style>
-  :root{--bg:#0b1220;--card:#111827;--muted:#94a3b8;--text:#e5e7eb;--border:#1f2937;--radius:16px}
-  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 system-ui,Segoe UI,Roboto}
-  .wrap{max-width:900px;margin:0 auto;padding:18px}
-  h1{margin:0 0 10px;font-size:1.2rem}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin:10px 0}
-  label{display:block;margin:6px 0 4px;color:var(--muted)}
-  input,textarea{width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:#0b1220;color:#e5e7eb}
-  .grid{display:grid;gap:12px;grid-template-columns:1fr 1fr} @media (max-width:800px){.grid{grid-template-columns:1fr}}
-  .pill{display:inline-block;padding:4px 8px;border:1px solid var(--border);border-radius:999px;background:#0f172a;color:#94a3b8}
-  .photos{display:grid;grid-template-columns:repeat(4,1fr);gap:8px} @media (max-width:700px){.photos{grid-template-columns:repeat(2,1fr)}}
-  img{width:100%;border-radius:10px;border:1px solid var(--border)}
-  .right{display:flex;gap:8px;justify-content:flex-end}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <h1>Action #<?= (int)$row['id'] ?> — Tour #<?= (int)$row['tour_id'] ?> (<?= htmlspecialchars($row['site']) ?>)</h1>
-  <?php if (isset($_GET['saved'])): ?><div class="pill">Saved</div><?php endif; ?>
-
-  <div class="card">
-    <div class="grid">
-      <div><label>Action</label><input value="<?= htmlspecialchars($row['action']) ?>" readonly></div>
-      <div><label>Responsible</label><input value="<?= htmlspecialchars($row['responsible'] ?? '') ?>" readonly></div>
-    </div>
-    <div class="grid">
-      <div><label>Due</label><input value="<?= $row['due_date'] ? htmlspecialchars(date('Y-m-d', strtotime($row['due_date']))) : '—' ?>" readonly></div>
-      <div><label>Status</label><input value="<?= htmlspecialchars($row['status']) ?>" readonly></div>
-    </div>
-  </div>
-
-  <form method="post" enctype="multipart/form-data" class="card">
-    <label>Close-out description</label>
-    <textarea name="close_note" rows="4" placeholder="What was done to close this action?"><?= htmlspecialchars($row['close_note'] ?? '') ?></textarea>
-
-    <div class="grid">
-      <div>
-        <label>Closed by</label>
-        <input name="closed_by" value="<?= htmlspecialchars($row['closed_by'] ?? '') ?>" placeholder="Name">
-      </div>
-      <div>
-        <label>Attach images</label>
-        <input type="file" name="photos[]" accept="image/*" multiple>
-      </div>
-    </div>
-
-    <?php if ($closedPhotos): ?>
-      <div style="margin-top:8px">
-        <div class="pill" style="margin-bottom:6px">Existing close-out photos</div>
-        <div class="photos">
-          <?php foreach ($closedPhotos as $p): ?>
-            <a href="<?= htmlspecialchars($p) ?>" target="_blank"><img src="<?= htmlspecialchars($p) ?>"></a>
-          <?php endforeach; ?>
-        </div>
-      </div>
-    <?php endif; ?>
-
-    <div class="right" style="margin-top:10px">
-      <a class="pill" href="actions.php">← Back</a>
-      <button type="submit">Save & Close</button>
-    </div>
-  </form>
-
-  <div class="right" style="margin-top:10px">
-    <a class="pill" href="pdf.php?id=<?= (int)$row['tour_id'] ?>" target="_blank">Open Tour PDF</a>
-  </div>
-</div>
-</body>
-</html>
+// Fallback: if someone GETs here without params, bounce back.
+header('Location: '.$back);

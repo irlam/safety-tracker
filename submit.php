@@ -1,298 +1,236 @@
 <?php
-// File: submit.php
-// Description: Processes and saves a submitted Site Safety Tour form, handles file uploads (including per-question photos and signatures), generates a PDF report, sends notification emails, and redirects to the success page. Fully modern, commented, and all dates/times are UK format.
-
+// /submit.php — save tour, create actions, email PDF
 declare(strict_types=1);
 
-// 1. Optional authentication (only runs if includes/auth.php exists)
-$auth = __DIR__ . '/includes/auth.php';
-if (is_file($auth)) {
-    require_once $auth;
-    if (function_exists('auth_check')) auth_check();
-}
-
-// 2. Includes and timezone
 require_once __DIR__ . '/includes/functions.php';
-date_default_timezone_set('Europe/London');
-$pdo = db();
+@date_default_timezone_set('Europe/London');
 
-/* ---------------------------------
-   3. Helper functions
-----------------------------------*/
+function post_arr(string $k): array { return isset($_POST[$k]) && is_array($_POST[$k]) ? $_POST[$k] : []; }
+function hstr(?string $v): string { return trim((string)$v); }
 
-// Converts a string to a URL/file-friendly slug (letters, numbers, dashes)
-function hslug(string $s): string {
-    $s = strtolower(trim(preg_replace('~[^a-z0-9]+~i', '-', $s), '-'));
-    return $s !== '' ? $s : 'tour';
-}
-
-// Returns all column names in a table (for safe insert)
-function table_columns(PDO $pdo, string $table): array {
-    try {
-        $st = $pdo->prepare("SELECT COLUMN_NAME FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ?");
-        $st->execute([$table]);
-        return array_map(fn($r) => $r['COLUMN_NAME'], $st->fetchAll());
-    } catch (Throwable $e) {
-        return [];
-    }
-}
-
-// Returns true if the column exists in the table
-function col_exists(PDO $pdo, string $table, string $col): bool {
-    static $cache = [];
-    $key = $table;
-    if (!isset($cache[$key])) $cache[$key] = table_columns($pdo, $table);
-    return in_array($col, $cache[$key] ?? [], true);
-}
-
-// Saves a PNG or JPEG signature from a data:URL to /uploads/signatures, returns the relative path
-function save_signature_data(string $dataUrl): ?string {
-    if (!preg_match('~^data:image/(png|jpeg);base64,~', $dataUrl)) return null;
-    $data = base64_decode(preg_replace('~^data:image/\w+;base64,~', '', $dataUrl), true);
-    if ($data === false) return null;
-    $dir = __DIR__ . '/uploads/signatures';
-    if (!is_dir($dir)) @mkdir($dir, 0775, true);
-    $name = 'sig_' . uniqid('', true) . '.png';
-    $abs  = $dir . '/' . $name;
-    if (@file_put_contents($abs, $data) === false) return null;
-    return 'uploads/signatures/' . $name;
-}
-
-/* ---------------------------------
-   4. Checklist definition (same as form.php)
-----------------------------------*/
-
-// ...The $CHECKLIST array remains unchanged...
-
-// Flatten checklist for easy lookup/indexing
-$FLAT = [];
-foreach ($CHECKLIST as $section => $items) {
-    foreach ($items as $i) {
-        $FLAT[] = ['section' => $section, 'code' => $i['code'], 'q' => $i['q']];
-    }
-}
-
-/* ---------------------------------
-   5. Gather POST data
-----------------------------------*/
-$site         = trim($_POST['site']        ?? '');
-$area         = trim($_POST['area']        ?? '');
-$lead_name    = trim($_POST['lead_name']   ?? '');
-$participants = trim($_POST['participants']?? '');
-$tour_date_in = (string)($_POST['tour_date'] ?? '');
-// Always store as Y-m-d H:i:s (UK, 24hr)
+// -------- Gather basic fields --------
+$site         = hstr($_POST['site']        ?? '');
+$area         = hstr($_POST['area']        ?? '');
+$lead_name    = hstr($_POST['lead_name']   ?? '');
+$participants = hstr($_POST['participants']?? '');
+$tour_date_in = hstr($_POST['tour_date']   ?? '');               // datetime-local
 $tour_date    = $tour_date_in ? date('Y-m-d H:i:s', strtotime($tour_date_in)) : date('Y-m-d H:i:s');
 
-// Answers and supporting fields
-$check_status = $_POST['check_status'] ?? [];
-$f_severity   = $_POST['f_severity']   ?? [];
-$a_due        = $_POST['a_due']        ?? [];
-$a_action     = $_POST['a_action']     ?? [];
-$a_resp       = $_POST['a_resp']       ?? [];
-$f_note       = $_POST['f_note']       ?? [];
-$f_category   = $_POST['f_category']   ?? [];
-
+// Optional manual score (we’ll also recompute % below)
 $score_achieved = isset($_POST['score_achieved']) ? (int)$_POST['score_achieved'] : null;
 $score_total    = isset($_POST['score_total'])    ? (int)$_POST['score_total']    : null;
-$score_percent  = isset($_POST['score_percent']) && $_POST['score_percent']!=='' ? (float)str_replace('%','',$_POST['score_percent']) : null;
+$score_percent  = null;
 
-// Recipients (comma-separated email list)
-$recipients_raw = trim((string)($_POST['recipients'] ?? ''));
-$recipients = [];
-if ($recipients_raw !== '') {
-    foreach (explode(',', $recipients_raw) as $e) {
-        $e = strtolower(trim($e));
-        if ($e && preg_match('~^[^@\s]+@[^@\s]+\.[^@\s]+$~', $e)) $recipients[] = $e;
-    }
-    $recipients = array_values(array_unique($recipients));
-}
+// Recipients (CSV from chips)
+$recipients_csv = hstr($_POST['recipients'] ?? '');
+$recipient_list = array_values(array_filter(array_map(fn($e)=>strtolower(trim($e)), explode(',', $recipients_csv)), fn($e)=>$e!=='' && filter_var($e, FILTER_VALIDATE_EMAIL)));
 
-/* ---------------------------------
-   6. Signature (file OR canvas dataURL required)
-----------------------------------*/
-$signature_path = null;
-$has_file = !empty($_FILES['signature_file']['tmp_name']) && is_uploaded_file($_FILES['signature_file']['tmp_name']);
-$has_data = isset($_POST['signature_data']) && strpos($_POST['signature_data'], 'data:image/') === 0;
+// -------- Build responses (with per-question photos) --------
+$q_codes   = post_arr('q_code');     // ["1.1", "1.2", ...]
+$q_texts   = post_arr('q_text');     // question text
+$results   = post_arr('check_status');  // Pass/Improvement/Fail/N/A
+$prior     = post_arr('f_severity');    // Low/Medium/High (optional)
+$notes     = post_arr('f_note');        // evidence/notes
+$actions   = post_arr('a_action');      // action text (if any)
+$respons   = post_arr('a_resp');        // responsible
+$dues      = post_arr('a_due');         // YYYY-MM-DD
+$cats      = post_arr('f_category');    // section name per q
 
-if ($has_file) {
-    $signature_path = save_file($_FILES['signature_file'], 'signatures');
-} elseif ($has_data) {
-    $signature_path = save_signature_data((string)$_POST['signature_data']);
-}
-
-if (!$signature_path) {
-    http_response_code(400);
-    echo "Signature required.";
-    exit;
-}
-
-/* ---------------------------------
-   7. Handle file uploads for questions and extra
-----------------------------------*/
-// Per-question matrix (qphotos[index][])
-$qImages = []; // index => [paths...]
-if (!empty($_FILES['qphotos']['name']) && is_array($_FILES['qphotos']['name'])) {
-    foreach ($_FILES['qphotos']['name'] as $idx => $names) {
-        if (!is_array($names)) continue;
+// collect per-question images from $_FILES['qphotos'][qIndex][]
+$resp = [];
+$totalQs = count($q_codes);
+for ($i=0; $i<$totalQs; $i++) {
+    $imgs = [];
+    if (!empty($_FILES['qphotos']['name'][$i]) && is_array($_FILES['qphotos']['name'][$i])) {
+        // Unroll the nested arrays for index $i
+        $names = $_FILES['qphotos']['name'][$i];
+        $types = $_FILES['qphotos']['type'][$i];
+        $tmps  = $_FILES['qphotos']['tmp_name'][$i];
+        $errs  = $_FILES['qphotos']['error'][$i];
+        $sizes = $_FILES['qphotos']['size'][$i];
         foreach ($names as $k => $n) {
-            $tmp = [
-                'name'     => $_FILES['qphotos']['name'][$idx][$k] ?? '',
-                'type'     => $_FILES['qphotos']['type'][$idx][$k] ?? '',
-                'tmp_name' => $_FILES['qphotos']['tmp_name'][$idx][$k] ?? '',
-                'error'    => $_FILES['qphotos']['error'][$idx][$k] ?? 0,
-                'size'     => $_FILES['qphotos']['size'][$idx][$k] ?? 0,
-            ];
-            if (empty($tmp['tmp_name'])) continue;
-            $rel = save_file($tmp, 'tours'); // save now, not depending on tour id path
-            if ($rel) $qImages[(int)$idx][] = $rel;
+            if (!isset($tmps[$k]) || !is_uploaded_file($tmps[$k])) continue;
+            $rel = save_file([
+                'name'     => $names[$k],
+                'type'     => $types[$k],
+                'tmp_name' => $tmps[$k],
+                'error'    => $errs[$k],
+                'size'     => $sizes[$k],
+            ], 'tours');
+            if ($rel) $imgs[] = $rel;
         }
     }
-}
 
-// Extra photos (any section)
-$photos = [];
-if (!empty($_FILES['photos']['name'][0] ?? '')) {
-    foreach ($_FILES['photos']['name'] as $i => $n) {
-        $tmp = [
-            'name'     => $_FILES['photos']['name'][$i] ?? '',
-            'type'     => $_FILES['photos']['type'][$i] ?? '',
-            'tmp_name' => $_FILES['photos']['tmp_name'][$i] ?? '',
-            'error'    => $_FILES['photos']['error'][$i] ?? 0,
-            'size'     => $_FILES['photos']['size'][$i] ?? 0,
-        ];
-        if (empty($tmp['tmp_name'])) continue;
-        $rel = save_file($tmp, 'tours');
-        if ($rel) $photos[] = $rel;
-    }
-}
-
-/* ---------------------------------
-   8. Build responses array (aligned to checklist)
-----------------------------------*/
-$responses = [];
-$N = max(
-    count($FLAT),
-    count($check_status), count($f_severity), count($a_due),
-    count($a_action), count($a_resp), count($f_note), count($f_category)
-);
-
-for ($i = 0; $i < $N; $i++) {
-    $meta = $FLAT[$i] ?? ['section'=>$f_category[$i] ?? '', 'code'=>'', 'q'=>''];
-    $responses[] = [
-        'section'    => (string)($meta['section'] ?? ($f_category[$i] ?? '')),
-        'code'       => (string)($meta['code'] ?? ''),
-        'question'   => (string)($meta['q'] ?? ''),
-        'result'     => (string)($check_status[$i] ?? ''),
-        'priority'   => (string)($f_severity[$i]   ?? ''),
-        'note'       => (string)($f_note[$i]       ?? ''),
-        'action'     => (string)($a_action[$i]     ?? ''),
-        'responsible'=> (string)($a_resp[$i]       ?? ''),
-        'due'        => (string)($a_due[$i]        ?? ''),
-        'images'     => array_values($qImages[$i] ?? []),
+    $resp[] = [
+        'section'    => $cats[$i]    ?? '',
+        'code'       => $q_codes[$i] ?? '',
+        'question'   => $q_texts[$i] ?? '',
+        'result'     => $results[$i] ?? '',
+        'priority'   => $prior[$i]   ?? '',
+        'note'       => $notes[$i]   ?? '',
+        'action'     => $actions[$i] ?? '',
+        'responsible'=> $respons[$i] ?? '',
+        'due'        => $dues[$i]    ?? '',
+        'images'     => $imgs,
     ];
 }
 
-/* ---------------------------------
-   9. Auto score calculation (if not supplied)
-----------------------------------*/
-$score_auto = tally_score($responses);
-if ($score_achieved === null || $score_total === null) {
-    $score_total    = $score_auto['counts']['pass'] + $score_auto['counts']['fail'] + $score_auto['counts']['improvement'];
-    $score_achieved = $score_auto['counts']['pass'];
-}
-if ($score_percent === null) {
-    $score_percent = $score_total > 0 ? round(($score_achieved / $score_total) * 100, 2) : null;
-}
-
-/* ---------------------------------
-   10. Insert tour into database (only columns that exist)
-----------------------------------*/
-$cols = table_columns($pdo, 'safety_tours');
-$data = [
-    'tour_date'      => $tour_date,
-    'site'           => $site,
-    'area'           => $area,
-    'lead_name'      => $lead_name,
-    'participants'   => $participants,
-    'responses'      => json_encode($responses, JSON_UNESCAPED_UNICODE),
-    'photos'         => json_encode($photos, JSON_UNESCAPED_UNICODE),
-    'signature_path' => $signature_path,
-    'status'         => 'Open',
-    'score_achieved' => $score_achieved,
-    'score_total'    => $score_total,
-    'score_percent'  => $score_percent,
-    'recipients'     => $recipients ? implode(',', $recipients) : null,
-];
-// Only insert columns that exist in the DB
-$insCols = [];
-$insMarks= [];
-$insArgs = [];
-foreach ($data as $k => $v) {
-    if (in_array($k, $cols, true)) {
-        $insCols[]  = "`$k`";
-        $insMarks[] = "?";
-        $insArgs[]  = $v;
+// -------- Extra photos (not tied to a specific question) --------
+$extra_photos = [];
+if (!empty($_FILES['photos']['name'][0])) {
+    foreach ($_FILES['photos']['name'] as $i => $name) {
+        if (!is_uploaded_file($_FILES['photos']['tmp_name'][$i] ?? '')) continue;
+        $rel = save_file([
+            'name'     => $_FILES['photos']['name'][$i],
+            'type'     => $_FILES['photos']['type'][$i],
+            'tmp_name' => $_FILES['photos']['tmp_name'][$i],
+            'error'    => $_FILES['photos']['error'][$i],
+            'size'     => $_FILES['photos']['size'][$i],
+        ], 'tours');
+        if ($rel) $extra_photos[] = $rel;
     }
 }
-$sql = "INSERT INTO `safety_tours` (".implode(',', $insCols).") VALUES (".implode(',', $insMarks).")";
-$st  = $pdo->prepare($sql);
-$st->execute($insArgs);
-$id = (int)$pdo->lastInsertId();
 
-/* ---------------------------------
-   11. Save/refresh recipient directory
-----------------------------------*/
-if ($recipients) {
-    foreach ($recipients as $em) {
-        try {
-            $pdo->prepare("INSERT INTO safety_recipient_emails (email, label, use_count, last_used)
-            VALUES (?, '', 1, NOW())
-            ON DUPLICATE KEY UPDATE use_count = use_count+1, last_used = NOW()
-            ")->execute([$em]);
-        } catch (Throwable $e) {
-            // non-fatal
+// -------- Signature (required: canvas OR file) --------
+$signature_path = null;
+$canvas_b64 = $_POST['signature_data'] ?? '';
+if ($canvas_b64 && str_starts_with($canvas_b64, 'data:image/')) {
+    $bin = explode(',', $canvas_b64, 2)[1] ?? '';
+    $raw = base64_decode($bin, true);
+    if ($raw !== false) {
+        $dir = __DIR__ . '/uploads/signatures';
+        if (!is_dir($dir)) mkdir($dir, 0775, true);
+        $name = 'sig_' . uniqid('', true) . '.png';
+        file_put_contents($dir . '/' . $name, $raw);
+        $signature_path = 'uploads/signatures/' . $name;
+    }
+} elseif (!empty($_FILES['signature_file']['name'])) {
+    $rel = save_file($_FILES['signature_file'], 'signatures');
+    if ($rel) $signature_path = $rel;
+}
+if (!$signature_path) {
+    // Simple guard; front-end should prevent this, but keep it server-side too
+    http_response_code(422);
+    echo "Signature is required."; exit;
+}
+
+// -------- Recompute score from responses (Pass = 1, Improve/Fail/N/A = 0 by default) --------
+$score_json = ['per_q' => []];
+$autoA = 0; $autoT = 0;
+foreach ($resp as $r) {
+    if (!empty($r['result'])) {
+        $autoT++;
+        if ($r['result'] === 'Pass') $autoA++;
+    }
+    $score_json['per_q'][] = ['code'=>$r['code'], 'result'=>$r['result'] ?? null];
+}
+if ($score_total === null)    $score_total    = $autoT ?: null;
+if ($score_achieved === null) $score_achieved = $autoA ?: null;
+if ($score_total && $score_achieved !== null) {
+    $score_percent = round(($score_achieved / max(1,$score_total)) * 100, 2);
+}
+
+// -------- Insert tour --------
+$pdo = db();
+$sql = "INSERT INTO safety_tours
+  (tour_date, site, area, lead_name, participants,
+   recipients, responses, score_achieved, score_total, score_percent, score_json,
+   photos, signature_name, signature_path, status)
+  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'Open')";
+$st = $pdo->prepare($sql);
+$st->execute([
+    $tour_date,
+    $site,
+    $area ?: null,
+    $lead_name,
+    $participants ?: null,
+    $recipient_list ? implode(',', $recipient_list) : null,
+    json_encode($resp, JSON_UNESCAPED_UNICODE),
+    $score_achieved,
+    $score_total,
+    $score_percent,
+    json_encode($score_json, JSON_UNESCAPED_UNICODE),
+    json_encode($extra_photos, JSON_UNESCAPED_UNICODE),
+    $lead_name ?: null,
+    $signature_path
+]);
+$tour_id = (int)$pdo->lastInsertId();
+
+// -------- Create safety_actions rows from responses that need them --------
+$insAct = $pdo->prepare("
+  INSERT INTO safety_actions (tour_id, action, responsible, due_date, priority, status, created_at)
+  VALUES (?,?,?,?,?, 'Open', NOW())
+");
+foreach ($resp as $r) {
+    $needsAction = ($r['action'] ?? '') !== '' || in_array(($r['result'] ?? ''), ['Fail','Improvement'], true);
+    if (!$needsAction) continue;
+    $due = hstr($r['due'] ?? '');
+    $dueDate = $due ? date('Y-m-d', strtotime($due)) : null;
+    $prio = hstr($r['priority'] ?? '');
+    if ($prio === '') $prio = null;
+    $insAct->execute([
+        $tour_id,
+        hstr($r['action'] ?? '') ?: ($r['question'] ?? ''),   // if no action text, keep question as reminder
+        hstr($r['responsible'] ?? '') ?: null,
+        $dueDate,
+        $prio,
+    ]);
+}
+
+// -------- Upsert recipient emails into safety_recipient_emails --------
+if ($recipient_list) {
+    // Make sure unique index exists on (email) for ON DUPLICATE KEY to work.
+    // ALTER TABLE safety_recipient_emails ADD UNIQUE KEY uq_email (email);
+    $insRec = $pdo->prepare("
+      INSERT INTO safety_recipient_emails (email, use_count, last_used, created_at, updated_at)
+      VALUES (?, 1, NOW(), NOW(), NOW())
+      ON DUPLICATE KEY UPDATE use_count = use_count + 1, last_used = NOW(), updated_at = NOW()
+    ");
+    foreach ($recipient_list as $em) {
+        try { $insRec->execute([$em]); } catch (Throwable $e) { /* ignore */ }
+    }
+}
+
+// -------- PDF (UK filename) --------
+$ukStamp = date('Y-m-d_H-i', strtotime($tour_date));       // 2025-09-23_14-06
+$baseName = preg_replace('~[^a-z0-9]+~i', '-', $site . ($area ? '-'.$area : ''));
+$baseName = trim($baseName, '-');
+$pdfDir   = __DIR__ . '/uploads/tours';
+if (!is_dir($pdfDir)) mkdir($pdfDir, 0775, true);
+$pdfPath  = $pdfDir . '/SafetyTour_' . $baseName . '_' . $ukStamp . '.pdf';
+
+// Render using your existing pdf.php logic if file missing later, but also create now:
+try {
+    // Fetch fresh row for render
+    $st2 = $pdo->prepare("SELECT * FROM safety_tours WHERE id=?");
+    $st2->execute([$tour_id]);
+    $tourRow = $st2->fetch();
+    if ($tourRow) {
+        // You said render_pdf() exists in includes/functions.php in your build
+        if (function_exists('render_pdf')) {
+            render_pdf($tourRow, $pdfPath);
         }
     }
+} catch (Throwable $e) { /* non-fatal */ }
+
+// -------- Email PDF --------
+$mailOK = false;
+if ($recipient_list && file_exists($pdfPath)) {
+    $subj = 'Safety Tour #'.$tour_id.' — '.$site.($area?' / '.$area:'');
+    $body = '<p>Safety Tour <strong>#'.$tour_id.'</strong> recorded for <strong>'.htmlspecialchars($site).'</strong>.</p>'.
+            '<p>Date: '.htmlspecialchars(date('d/m/Y H:i', strtotime($tour_date))).'</p>'.
+            '<p>Open PDF: <a href="/pdf.php?id='.$tour_id.'">Report</a></p>';
+    foreach ($recipient_list as $em) {
+        $ok = send_mail($em, $subj, $body, [['path'=>$pdfPath, 'name'=>basename($pdfPath)]]);
+        if ($ok) $mailOK = true;
+    }
 }
 
-/* ---------------------------------
-   12. Generate PDF and send notification email
-----------------------------------*/
-$pdfOK = 0; $mailOK = 0;
-
-// UK file name e.g. SafetyTour_rochdale-road_21-09-2025_14-30.pdf
-$ukDate  = date('d-m-Y_H-i', strtotime($tour_date));
-$slug    = hslug($site);
-$dir     = __DIR__ . '/uploads/tours/' . $id;
-if (!is_dir($dir)) @mkdir($dir, 0775, true);
-$outPath = $dir . '/SafetyTour_' . $slug . '_' . $ukDate . '.pdf';
-
-try {
-    // Fetch the row to feed the PDF renderer (ensures correct DB formatting)
-    $tour = $pdo->prepare("SELECT * FROM safety_tours WHERE id=?");
-    $tour->execute([$id]);
-    $row = $tour->fetch();
-    render_pdf($row, $outPath);
-    $pdfOK = 1;
-} catch (Throwable $e) {
-    error_log('PDF: '.$e->getMessage());
+// -------- Redirect --------
+$success = __DIR__ . '/success.php';
+if (is_file($success)) {
+    header('Location: success.php?id='.$tour_id.'&pdf='.(int)file_exists($pdfPath).'&mail='.(int)$mailOK);
+} else {
+    header('Location: pdf.php?id='.$tour_id);
 }
-
-$toSend = $recipients ?: [SMTP_USER]; // fallback so nothing is lost
-try {
-    $mailOK = send_mail_multi(
-        $toSend,
-        'Safety Tour #'.$id.' — '.$site,
-        '<p>Safety Tour <strong>#'.$id.'</strong> for <strong>'.htmlspecialchars($site).'</strong> ('.$ukDate.').</p>'.
-        '<p><a href="'.htmlspecialchars((($_SERVER['REQUEST_SCHEME'] ?? 'https').'://'.$_SERVER['HTTP_HOST']).'/pdf.php?id='.$id).'">Open PDF</a></p>',
-        [['path'=>$outPath, 'name'=>basename($outPath)]]
-    ) ? 1 : 0;
-} catch (Throwable $e) {
-    error_log('MAIL: '.$e->getMessage());
-}
-
-/* ---------------------------------
-   13. Done → redirect to success page
-----------------------------------*/
-header('Location: success.php?id='.$id.'&pdf='.$pdfOK.'&mail='.$mailOK);
 exit;
