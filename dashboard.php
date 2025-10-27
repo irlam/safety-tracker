@@ -289,6 +289,9 @@ $showDeletedToast = !empty($_GET['deleted']);
         <a class="navbtn" href="/dashboard.php">Dashboard</a>
         <a class="navbtn" href="/form.php">New Tour</a>
         <a class="navbtn" href="/actions.php">Actions</a>
+        <a href="analytics.php">📊 View Analytics</a>
+<a href="export.php?format=csv">📥 Download CSV</a>
+<a href="export.php?format=excel">📥 Download Excel</a>
         <button id="btnInstall" class="navbtn" type="button" style="display:none">Install app</button>
       </div>
     </nav>
