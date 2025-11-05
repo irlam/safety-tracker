@@ -1,6 +1,7 @@
 # Uploaded files
 uploads/*
 !uploads/.gitkeep
+!uploads/.htaccess
 
 # Configuration with sensitive data
 # Note: config.php contains credentials and should not be committed in production
