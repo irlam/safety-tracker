@@ -1,1 +1,33 @@
+# Default index files
 DirectoryIndex index.php index.html
+
+# Security: Prevent access to sensitive files
+<FilesMatch "^(config\.php|\.gitignore|\.htaccess)$">
+    Require all denied
+</FilesMatch>
+
+# Security: Protect includes directory
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^includes/ - [F,L]
+</IfModule>
+
+# Prevent directory listing
+Options -Indexes
+
+# Security Headers (if mod_headers is available)
+<IfModule mod_headers.c>
+    # Prevent clickjacking
+    Header always set X-Frame-Options "SAMEORIGIN"
+    
+    # Prevent MIME type sniffing
+    Header always set X-Content-Type-Options "nosniff"
+    
+    # Enable XSS protection
+    Header always set X-XSS-Protection "1; mode=block"
+    
+    # Remove server signature
+    Header unset Server
+    Header unset X-Powered-By
+</IfModule>
+
