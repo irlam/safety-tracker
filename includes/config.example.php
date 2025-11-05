@@ -22,7 +22,7 @@ const MAIL_FROM_NAME = 'Safety Tours';
 
 // Auth
 const AUTH_MODE = 'password'; // 'password' or 'open'
-const AUTH_PASSWORD = 'change-this-password'; // change this
+const AUTH_PASSWORD = 'change-this-password'; // IMPORTANT: Use a strong, unique password (minimum 12+ characters)
 
 // Files
 const UPLOAD_DIR = __DIR__ . '/../uploads';

@@ -8,8 +8,9 @@
     Require all denied
 </FilesMatch>
 
-# Allow only specific file types
-<FilesMatch "\.(jpg|jpeg|png|gif|pdf|webp|svg)$">
+# Allow only specific file types (images and PDFs)
+# Note: SVG files excluded due to potential XSS risks
+<FilesMatch "\.(jpg|jpeg|png|gif|pdf|webp)$">
     Require all granted
 </FilesMatch>
 

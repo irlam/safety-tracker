@@ -4,7 +4,8 @@ uploads/*
 !uploads/.htaccess
 
 # Configuration with sensitive data
-# Note: config.php contains credentials and should not be committed in production
+# IMPORTANT: Prevent committing real credentials
+includes/config.php
 # Use config.example.php as a template
 
 # Temporary files
