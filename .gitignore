@@ -1,0 +1,30 @@
+# Uploaded files
+uploads/*
+!uploads/.gitkeep
+!uploads/.htaccess
+
+# Configuration with sensitive data
+# IMPORTANT: Prevent committing real credentials
+includes/config.php
+# Use config.example.php as a template
+
+# Temporary files
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# PHP
+vendor/
+composer.lock
+
+# Database
+*.sql.gz
+*.sql.bak
