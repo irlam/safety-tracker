@@ -15,14 +15,6 @@ $THEME_COLOR = '#0ea5e9';
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Safety Tours">
-<link rel="manifest" href="/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/pwa/icons/icon-apple-180.png">
-<meta name="theme-color" content="#0ea5e9">
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch(()=>{});
-  }
-</script>
 
 <!-- Icons (Android + iOS + favicon) -->
 <link rel="apple-touch-icon" href="/assets/pwa/icons/apple-touch-icon.png">

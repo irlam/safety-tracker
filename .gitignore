@@ -1,0 +1,28 @@
+# Uploaded files
+uploads/*
+!uploads/.gitkeep
+
+# Configuration with sensitive data
+# Note: config.php contains credentials and should not be committed in production
+# Use config.example.php as a template
+
+# Temporary files
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# PHP
+vendor/
+composer.lock
+
+# Database
+*.sql.gz
+*.sql.bak
