@@ -11,7 +11,11 @@ $expected = '';
 if (defined('CONSTRUCTION_SUITE_API_KEY')) {
     $expected = trim((string) CONSTRUCTION_SUITE_API_KEY);
 } else {
-    $expected = trim((string) (getenv('CONSTRUCTION_SUITE_API_KEY') ?: ''));
+    $expected = trim((string) (
+        getenv('CONSTRUCTION_SUITE_API_KEY')
+        ?: getenv('SUITE_INTEGRATION_KEY')
+        ?: ''
+    ));
 }
 if ($expected === '') {
     $envPath = dirname(__DIR__) . '/.env';
@@ -22,7 +26,7 @@ if ($expected === '') {
                 continue;
             }
             [$name, $value] = array_map('trim', explode('=', $line, 2));
-            if ($name !== 'CONSTRUCTION_SUITE_API_KEY') {
+            if (!in_array($name, ['CONSTRUCTION_SUITE_API_KEY', 'SUITE_INTEGRATION_KEY'], true)) {
                 continue;
             }
             $expected = trim($value, " \t\n\r\0\x0B\"'");
