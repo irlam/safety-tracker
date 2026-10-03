@@ -24,6 +24,9 @@ const MAIL_FROM_NAME = 'Safety Tours';
 const AUTH_MODE = 'password'; // 'password' or 'open'
 const AUTH_PASSWORD = 'change-this-password'; // IMPORTANT: Use a strong, unique password (minimum 12+ characters)
 
+// Construction Suite read-only integration. Use the same long random secret configured in the Suite Hub.
+const CONSTRUCTION_SUITE_API_KEY = 'replace-with-a-long-random-secret';
+
 // Files
 const UPLOAD_DIR = __DIR__ . '/../uploads';
 if (!is_dir(UPLOAD_DIR)) mkdir(UPLOAD_DIR, 0775, true);
