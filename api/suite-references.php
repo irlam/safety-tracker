@@ -9,7 +9,11 @@ require_once dirname(__DIR__) . '/includes/functions.php';
 
 $expected = defined('CONSTRUCTION_SUITE_API_KEY')
     ? trim((string) CONSTRUCTION_SUITE_API_KEY)
-    : trim((string) (getenv('CONSTRUCTION_SUITE_API_KEY') ?: ''));
+    : trim((string) (
+        getenv('CONSTRUCTION_SUITE_API_KEY')
+        ?: getenv('SUITE_INTEGRATION_KEY')
+        ?: ''
+    ));
 if ($expected === '') {
     $envPath = dirname(__DIR__) . '/.env';
     if (is_file($envPath) && is_readable($envPath)) {
@@ -19,7 +23,7 @@ if ($expected === '') {
                 continue;
             }
             [$name, $value] = array_map('trim', explode('=', $line, 2));
-            if ($name !== 'CONSTRUCTION_SUITE_API_KEY') {
+            if (!in_array($name, ['CONSTRUCTION_SUITE_API_KEY', 'SUITE_INTEGRATION_KEY'], true)) {
                 continue;
             }
             $expected = trim($value, " \t\n\r\0\x0B\"'");
