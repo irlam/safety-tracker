@@ -16,10 +16,21 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/functions.php';
 
-const ADMIN_BOOTSTRAP_EMAIL = 'admin@defecttracker.uk';
-const ADMIN_BOOTSTRAP_PASS  = 'Subaru5554346';
 
 function auth_bootstrap_admin(): void {
+  // Never seed a known administrator password from public source code.
+  // Existing users are unaffected. New installations must supply private,
+  // per-installation credentials or create an admin through secure setup.
+  $email = trim((string) (defined('SAFETY_BOOTSTRAP_ADMIN_EMAIL')
+    ? SAFETY_BOOTSTRAP_ADMIN_EMAIL
+    : (getenv('SAFETY_BOOTSTRAP_ADMIN_EMAIL') ?: '')));
+  $password = (string) (defined('SAFETY_BOOTSTRAP_ADMIN_PASSWORD')
+    ? SAFETY_BOOTSTRAP_ADMIN_PASSWORD
+    : (getenv('SAFETY_BOOTSTRAP_ADMIN_PASSWORD') ?: ''));
+  if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 16) {
+    return;
+  }
+
   $pdo = db();
   try {
     // table may not exist yet; ignore errors
@@ -39,10 +50,10 @@ function auth_bootstrap_admin(): void {
     if ($c === 0) {
       $st = $pdo->prepare("INSERT INTO safety_users (email,name,role,pass_hash) VALUES (?,?,?,?)");
       $st->execute([
-        ADMIN_BOOTSTRAP_EMAIL,
+        $email,
         'Admin',
         'admin',
-        password_hash(ADMIN_BOOTSTRAP_PASS, PASSWORD_DEFAULT)
+        password_hash($password, PASSWORD_DEFAULT)
       ]);
     }
   } catch (Throwable $e) {}
