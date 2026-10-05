@@ -27,11 +27,18 @@ elseif (function_exists('is_admin'))  { $isAdmin = (bool)is_admin(); }
 // Filters
 // ------------------------------
 $q      = trim((string)($_GET['q']      ?? ''));
+$site   = trim((string) ($_GET['site'] ?? ''));
 $status = (string)($_GET['status'] ?? 'Open');   // Open | Closed | Any
 $due    = (string)($_GET['due']    ?? 'Any');    // Any | Overdue | Today | 7days
 
 $where = [];
 $args  = [];
+
+// The Suite passes an exact site name; free-text q is a separate search.
+if ($site !== '') {
+  $where[] = 't.site = ?';
+  $args[] = $site;
+}
 
 if ($status === 'Open' || $status === 'Closed') {
   $where[] = "a.status = ?";
@@ -170,6 +177,7 @@ if (!empty($_SERVER['QUERY_STRING'])) $back .= '?'.$_SERVER['QUERY_STRING'];
 
   <!-- Filters -->
   <form class="card filters" method="get" action="actions.php">
+    <?php if ($site !== ''): ?><input type="hidden" name="site" value="<?= htmlspecialchars($site, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
     <div class="fgrid">
       <div>
         <label>Search</label>
