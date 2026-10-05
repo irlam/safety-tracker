@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS `safety_audit_log` (
   `tour_id` INT DEFAULT NULL,
   `action_id` INT DEFAULT NULL,
   `actor` VARCHAR(120) DEFAULT NULL,
-  `action` VARCHAR(80) NOT NULL,
+  `action` VARCHAR(80) DEFAULT NULL,
   `entity_type` VARCHAR(80) DEFAULT NULL,
   `entity_id` INT DEFAULT NULL,
   `details` TEXT DEFAULT NULL,
