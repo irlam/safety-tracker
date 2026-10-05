@@ -1,0 +1,24 @@
+name: Safety Tours Suite integration checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo, pdo_mysql
+      - name: PHP syntax
+        run: |
+          php -l api/suite-summary.php
+          php -l api/suite-references.php
+          php -l includes/auth.php
+          php -l tests/suite-integration.php
+      - name: Check integration and security regression
+        run: php tests/suite-integration.php
