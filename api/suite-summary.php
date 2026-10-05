@@ -65,7 +65,7 @@ try {
                 COALESCE(SUM(CASE WHEN a.status = 'Open' THEN 1 ELSE 0 END),0) AS open_actions,
                 COALESCE(SUM(CASE WHEN a.status = 'Closed' THEN 1 ELSE 0 END),0) AS closed_actions,
                 COALESCE(SUM(CASE WHEN a.status = 'Open' AND a.due_date IS NOT NULL AND a.due_date < CURDATE() THEN 1 ELSE 0 END),0) AS overdue,
-                COALESCE(SUM(CASE WHEN a.status = 'Open' AND LOWER(a.priority) = 'high' THEN 1 ELSE 0 END),0) AS high_priority,
+                COALESCE(SUM(CASE WHEN a.status = 'Open' AND LOWER(a.priority) = 'high' THEN 1 ELSE 0 END),0) AS `high_priority`,
                 MAX(a.created_at) AS last_updated
             FROM safety_actions a
             LEFT JOIN safety_tours t ON t.id = a.tour_id
