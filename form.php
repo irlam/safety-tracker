@@ -6,7 +6,7 @@ if (is_file($auth)) { require_once $auth; if (function_exists('auth_check')) aut
 
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/nav.php';
-if (function_exists('render_nav')) render_nav('new');
+// Render the navigation inside the document body for valid, mobile-safe markup.
 
 /* Checklist copied from your PDF (unchanged) */
 $CHECKLIST = [
@@ -115,6 +115,7 @@ try {
 </head>
 <body>
 <div class="wrap">
+  <?php if (function_exists('render_nav')) render_nav('new'); ?>
   <h1>New Site Safety Tour</h1>
 
   <form action="submit.php" method="post" enctype="multipart/form-data" class="card" id="tourForm">
