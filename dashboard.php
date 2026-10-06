@@ -233,6 +233,7 @@ $showDeletedToast = !empty($_GET['deleted']);
   require __DIR__ . '/includes/pwa_head.php';
 ?>
 <link rel="icon" href="/assets/img/favicon.png" type="image/png">
+<link rel="stylesheet" href="/assets/safety-ui.css">
 <script src="/pwa-install.js" defer></script>
 <style>
   :root{--bg:#0b1220;--text:#e5e7eb;--muted:#94a3b8;--border:#1f2937;--card:#0f172a;--accent1:#0ea5e9;--accent2:#0284c7;--ok:#16a34a;--warn:#b08900;--high:#7f1d1d;--radius:18px}
@@ -275,6 +276,16 @@ $showDeletedToast = !empty($_GET['deleted']);
   .toast{position:fixed;right:16px;top:16px;z-index:9999;background:linear-gradient(180deg,#22c55e,#16a34a);color:#00130b;border:1px solid #065f46;border-radius:14px;padding:10px 14px;font-weight:700;box-shadow:0 6px 24px rgba(0,0,0,.25);opacity:0;transform:translateY(-6px);transition:opacity .2s,transform .2s}
   .toast.show{opacity:1;transform:translateY(0)}
   .err{margin:8px 0 0;padding:10px;border:1px solid #7f1d1d;background:#3b0a0a26;border-radius:12px;color:#fecaca}
+
+@media(max-width:760px){
+  .wrap{width:100%;padding:12px}
+  .nav{flex-direction:column;align-items:stretch;gap:12px}
+  .navbtns{display:flex;gap:8px;overflow-x:auto;white-space:nowrap;padding-bottom:8px}
+  .navbtn,.btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+  .brand img{max-width:90px;max-height:54px;object-fit:contain}
+  input,select,button{max-width:100%}
+  .card{min-width:0}
+}
 </style>
 </head>
 <body>
@@ -282,13 +293,14 @@ $showDeletedToast = !empty($_GET['deleted']);
     <!-- NAV -->
     <nav class="nav">
       <div class="brand">
-        <img src="/assets/img/logo.png" alt="McGoff" onerror="this.style.display='none'">
-        <h1>Safety Tours</h1>
+        <img src="<?= htmlspecialchars(safety_branding_logo_url(), ENT_QUOTES, 'UTF-8') ?>" alt="<?= htmlspecialchars(safety_branding()['company_name'], ENT_QUOTES, 'UTF-8') ?> logo">
+        <h1><?= htmlspecialchars(safety_branding()['company_name'], ENT_QUOTES, 'UTF-8') ?> <small style="display:block;font-size:.67rem;color:#a0b5cb"><?= htmlspecialchars(safety_branding()['subtitle'], ENT_QUOTES, 'UTF-8') ?></small></h1>
       </div>
       <div class="navbtns">
         <a class="navbtn" href="/dashboard.php">Dashboard</a>
         <a class="navbtn" href="/form.php">New Tour</a>
         <a class="navbtn" href="/actions.php">Actions</a>
+        <?php if ($isAdmin): ?><a class="navbtn" href="/admin_branding.php">Branding</a><?php endif; ?>
         <a href="analytics.php">📊 View Analytics</a>
 <a href="export.php?format=csv">📥 Download CSV</a>
 <a href="export.php?format=excel">📥 Download Excel</a>
