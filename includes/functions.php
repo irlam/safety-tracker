@@ -318,7 +318,22 @@ function render_pdf(array $tour, string $outPath): void {
   $pdf->SetTextColor(20,20,20);
 
   // ---- Header
-  if ($logo=find_logo_path()) $pdf->Image($logo,12,10,28);
+  $logo = find_logo_path();
+  if ($logo && ($geometry = @getimagesize($logo))) {
+    // Keep even wide/tall customer logos within the same PDF header footprint.
+    $ratio = min(45 / max(1, $geometry[0]), 18 / max(1, $geometry[1]));
+    $pdf->Image($logo, 12, 10, $geometry[0] * $ratio, $geometry[1] * $ratio);
+  } else {
+    // Neutral fallback mark while a company logo has not been uploaded.
+    $pdf->SetFillColor(15, 40, 67);
+    $pdf->Rect(12, 10, 20, 20, 'F');
+    $pdf->SetDrawColor(18, 168, 208);
+    $pdf->SetLineWidth(1.6);
+    $pdf->Line(16, 20, 20, 24);
+    $pdf->Line(20, 24, 28, 15);
+    $pdf->SetDrawColor(180, 180, 180);
+    $pdf->SetLineWidth(0.2);
+  }
   $brand = safety_branding();
   $pdf->SetFont('Arial','B',13);
   $pdf->Cell(0,9,pdf_text($brand['report_title']),0,1,'R');
