@@ -108,7 +108,7 @@ function ukn(?string $dt): string {
   return $ts ? date('d/m/Y H:i', $ts) : h($dt);
 }
 
-require_once __DIR__ . '/includes/nav.php'; render_nav('actions');
+require_once __DIR__ . '/includes/nav.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -145,6 +145,7 @@ require_once __DIR__ . '/includes/nav.php'; render_nav('actions');
 </head>
 <body>
 <div class="wrap">
+  <?php if (function_exists('render_nav')) render_nav('actions'); ?>
   <?php if ($loadErr): ?>
     <div class="card err"><strong>Error:</strong> <?= h($loadErr) ?></div>
     <p><a class="btn ghost" href="<?= h($back) ?>">← Back</a></p>
