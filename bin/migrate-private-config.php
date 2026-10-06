@@ -4,6 +4,7 @@ declare(strict_types=1);
 // config loader. This never prints connection values or executes the source.
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('CLI only.'); }
 $root = dirname(__DIR__);
+if (($argv[1] ?? '') === '--legacy') $root = dirname($root, 2) . '/safety.defecttracker.uk/httpdocs';
 $source = $root . '/includes/config.php';
 $directory = dirname($root) . '/private';
 $target = $directory . '/config.php';
