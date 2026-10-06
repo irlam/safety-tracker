@@ -16,7 +16,9 @@ function table_exists(PDO $pdo, string $name): bool {
 
 $pdo = db();
 
-$isAdmin = function_exists('auth_is_admin') ? (bool)auth_is_admin() : false;
+$isAdmin = function_exists('auth_is_admin')
+  ? (bool) auth_is_admin()
+  : (function_exists('is_admin') && is_admin());
 $rowsTotalInTable = null;
 
 // --- helpers to cope with schema drift ---
