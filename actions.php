@@ -104,7 +104,8 @@ try {
   $st->execute($args);
   $rows = $st->fetchAll();
 } catch (Throwable $e) {
-  $lastSqlError = $e->getMessage();
+  error_log('Safety actions register: ' . $e->getMessage());
+  $lastSqlError = 'Action register temporarily unavailable. Please contact an administrator.';
 }
 
 // keep back url with filters
@@ -132,20 +133,25 @@ if (!empty($_SERVER['QUERY_STRING'])) $back .= '?'.$_SERVER['QUERY_STRING'];
 
   .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
   @media (max-width:980px){.grid{grid-template-columns:repeat(2,1fr)}}
-  @media (max-width:560px){.grid{grid-template-columns:1fr}}
+  @media (max-width:560px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.big{font-size:1.8rem}}
   .card{background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));border:1px solid var(--border);border-radius:var(--radius);padding:14px}
   .big{font-size:2.2rem;font-weight:800}
 
   .filters{margin:14px 0}
   .fgrid{display:grid;grid-template-columns:1fr 220px 220px 140px 110px; gap:12px}
   @media (max-width:1000px){.fgrid{grid-template-columns:1fr 1fr}}
+  @media (max-width:600px){.fgrid{grid-template-columns:minmax(0,1fr)}.wrap{padding:12px}.card{padding:12px}}
   label{display:block;margin:2px 0 6px;color:#cbd5e1}
   input,select{width:100%;background:#0b1220;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px}
 
   .btn{background:linear-gradient(180deg,var(--g1),var(--g2));border:0;border-radius:14px;color:#00131a;font-weight:800;padding:12px 16px;cursor:pointer}
   .btn-ghost{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));color:#d1d5db;border:1px solid var(--border);border-radius:14px;padding:12px 16px;text-decoration:none;display:inline-block;text-align:center}
 
-  table{width:100%;border-collapse:collapse}
+  .table-scroll{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{width:100%;min-width:920px;border-collapse:collapse}
+  .btn,.btn-ghost,.actbtn{min-height:44px}
+  input,select{min-height:45px}
+  :focus-visible{outline:3px solid #42cef6;outline-offset:2px}
   th,td{border:1px solid var(--border);padding:10px;vertical-align:top}
   th{background:#0f172a;text-align:left}
   .muted{color:#94a3b8}
@@ -210,13 +216,12 @@ if (!empty($_SERVER['QUERY_STRING'])) $back .= '?'.$_SERVER['QUERY_STRING'];
 
   <?php if ($lastSqlError): ?>
     <div class="err">
-      <strong>SQL error:</strong> <?= h($lastSqlError) ?><br>
-      <code><?= h($sql) ?></code>
+      <strong>Unable to load actions:</strong> <?= h($lastSqlError) ?>
     </div>
   <?php endif; ?>
 
   <!-- Table -->
-  <div class="card">
+  <div class="card table-scroll" role="region" aria-label="Safety actions register" tabindex="0">
     <table>
       <tr>
         <th>#</th>
