@@ -5,6 +5,8 @@ if (!function_exists('is_admin')) {
   if (is_file($auth)) require_once $auth;
 }
 
+require_once __DIR__ . '/branding.php';
+
 if (!function_exists('render_nav')) {
 function render_nav(string $active = ''): void {
   $isAdmin = function_exists('is_admin') ? is_admin() : false;
@@ -17,9 +19,9 @@ function render_nav(string $active = ''): void {
             background:radial-gradient(1200px 800px at 75% -100px, rgba(14,165,233,.10), transparent 60%),#0b1220;
             color:#e5e7eb;border-bottom:1px solid #1f2937;font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto}
     .dt-brand{display:flex;align-items:center;gap:10px}
-    .dt-brand img{height:28px}
+    .dt-brand img{width:72px;max-width:22vw;height:48px;object-fit:contain;border-radius:9px}.dt-brand{min-width:0}.dt-brand strong{overflow-wrap:anywhere}
     .dt-brand strong{font-weight:800;font-size:1.05rem}
-    .dt-links{display:flex;gap:10px;align-items:center}
+    .dt-links{display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:flex-end;min-width:0}
     .dt-btn{padding:10px 16px;border-radius:14px;border:1px solid #1f2937;
       background:linear-gradient(180deg, rgba(14,165,233,.25), rgba(2,132,199,.12));
       color:#dbeafe;text-decoration:none;font-weight:800;display:inline-flex;align-items:center;gap:8px}
@@ -38,13 +40,21 @@ function render_nav(string $active = ''): void {
     .dt-menu a:hover{background:#0b1220}
     #btnInstall{display:none;padding:10px 16px;border-radius:14px;border:1px solid #1f2937;
       background:linear-gradient(180deg,#22c55e,#16a34a);color:#00130b;font-weight:800}
-    @media (max-width:720px){.dt-links{flex-wrap:wrap}}
+    @media (max-width:860px){
+      .dt-nav{flex-direction:column;align-items:stretch;padding:12px;gap:10px}
+      .dt-brand{justify-content:flex-start}
+      .dt-links{display:flex;flex-wrap:nowrap;justify-content:flex-start;overflow-x:auto;overscroll-behavior-x:contain;
+        padding:2px 0 8px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+      .dt-btn,.dt-admin summary,#btnInstall{min-height:44px;white-space:nowrap;flex-shrink:0;padding:10px 13px}
+      .dt-menu{position:fixed;left:10px;right:10px;top:auto;min-width:0;max-height:65vh;overflow:auto}
+    }
+    @media (max-width:440px){.dt-brand img{width:56px;height:40px}.dt-brand strong{font-size:.95rem}}
   </style>
 
   <nav class="dt-nav">
     <div class="dt-brand">
-      <img src="/assets/img/logo.png" alt="Logo" onerror="this.style.display='none'">
-      <strong>Safety Tours</strong>
+      <img src="<?= htmlspecialchars(safety_branding_logo_url(), ENT_QUOTES, 'UTF-8') ?>" alt="<?= htmlspecialchars(safety_branding()['company_name'], ENT_QUOTES, 'UTF-8') ?> logo">
+      <strong><?= htmlspecialchars(safety_branding()['company_name'], ENT_QUOTES, 'UTF-8') ?> <small style="display:block;font-size:.7rem;color:#9db4cb;font-weight:600"><?= htmlspecialchars(safety_branding()['subtitle'], ENT_QUOTES, 'UTF-8') ?></small></strong>
     </div>
 
     <div class="dt-links">
@@ -60,7 +70,8 @@ function render_nav(string $active = ''): void {
           <details <?= $isActive('admin')?'open':''; ?>>
             <summary><?= $isActive('admin') ? 'Admin (open)' : 'Admin' ?></summary>
             <div class="dt-menu">
-              <a href="/admin_users.php"  <?= $isActive('admin_users') ? 'style="background:#0b1220"' : '' ?>>Users & Roles</a>
+              <a href="/admin_users.php"  <?= $isActive('admin_users') ? 'style="background:#0b1220"' : '' ?>>Users &amp; Roles</a>
+              <a href="/admin_branding.php" <?= $isActive('admin_branding') ? 'style="background:#0b1220"' : '' ?>>Branding &amp; reports</a>
               <a href="/audit.php"        <?= $isActive('audit') ? 'style="background:#0b1220"' : '' ?>>Audit Log</a>
               <a href="/health.php">Health Check</a>
               <a href="/mail_test.php">Mail Test</a>
