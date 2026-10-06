@@ -2,6 +2,7 @@
 // admin_users.php — manage users & admins
 require_once __DIR__ . '/includes/auth.php';
 auth_check(true); // admin only
+require_once __DIR__ . '/includes/branding.php';
 $pdo = db();
 
 $msg = '';
@@ -57,13 +58,14 @@ try {
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/safety-ui.css">
 <title>Admin — Users</title>
 <style>
 :root{--bg:#0b1220;--card:#0f172a;--text:#e5e7eb;--muted:#94a3b8;--border:#1f2937;--radius:18px;--g1:#0ea5e9;--g2:#0284c7}
 *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:16px system-ui,Segoe UI,Roboto}
 .wrap{max-width:1100px;margin:0 auto;padding:18px}
 .nav{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:14px}
-.navbtns{display:flex;gap:14px}
+.navbtns{display:flex;gap:9px;flex-wrap:wrap}
 .navbtn{padding:10px 16px;border-radius:14px;border:1px solid var(--border);
         background:linear-gradient(180deg, rgba(14,165,233,.25), rgba(2,132,199,.12));color:#dbeafe;font-weight:800;text-decoration:none}
 .card{background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin:12px 0}
@@ -74,8 +76,8 @@ label{display:block;margin:4px 0;color:var(--muted)}
 input,select{width:100%;padding:10px;border-radius:12px;border:1px solid var(--border);background:#0b1220;color:#e5e7eb}
 .btn{padding:10px 14px;border-radius:12px;border:0;cursor:pointer;background:linear-gradient(180deg,var(--g1),var(--g2));color:#00131a;font-weight:800}
 .btn-ghost{padding:10px 14px;border-radius:12px;border:1px solid var(--border);background:#0b1220;color:#e5e7eb}
-table{width:100%;border-collapse:collapse;margin-top:8px}
-th,td{border:1px solid var(--border);padding:10px}
+table{width:100%;border-collapse:collapse;margin-top:8px;min-width:800px}
+th,td{border:1px solid var(--border);padding:10px;min-width:100px}
 th{background:#0f172a;text-align:left}
 .toast{padding:10px;border-radius:10px;margin:10px 0}
 .ok{background:#0e1f15;border:1px solid #1d3e2b;color:#eaffec}
@@ -86,11 +88,12 @@ th{background:#0f172a;text-align:left}
 <div class="wrap">
   <nav class="nav">
     <div style="display:flex;align-items:center;gap:10px">
-      <img src="/assets/img/logo.png" alt="" style="height:30px" onerror="this.style.display='none'">
+      <img src="<?= htmlspecialchars(safety_branding_logo_url(), ENT_QUOTES, 'UTF-8') ?>" alt="<?= htmlspecialchars(safety_branding()['company_name'], ENT_QUOTES, 'UTF-8') ?> logo" style="width:85px;max-height:52px;object-fit:contain">
       <strong>Admin — Users</strong>
     </div>
     <div class="navbtns">
       <a class="navbtn" href="/dashboard.php">Dashboard</a>
+      <a class="navbtn" href="/admin_branding.php">Branding &amp; reports</a>
       <a class="navbtn" href="/actions.php">Actions</a>
       <a class="navbtn" href="/logout.php">Logout</a>
     </div>
@@ -120,7 +123,7 @@ th{background:#0f172a;text-align:left}
     </form>
   </div>
 
-  <div class="card">
+  <div class="card" style="overflow-x:auto">
     <table>
       <tr><th>#</th><th>Name</th><th>Email</th><th>Role</th><th>Set new password</th><th>Actions</th></tr>
       <?php if (!$users): ?>
