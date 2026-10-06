@@ -260,7 +260,7 @@ try {
 } catch (Throwable $e) { $known = []; }
 
 // Active tab in nav
-render_nav('edit');
+// Render the navigation inside the document body for valid, mobile-safe markup.
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -298,6 +298,7 @@ render_nav('edit');
 </head>
 <body>
 <div class="wrap">
+  <?php if (function_exists('render_nav')) render_nav('edit'); ?>
   <h1>Edit Safety Tour <span class="muted">#<?= (int)$id ?></span></h1>
 
   <?php if ($savedOk): ?>
