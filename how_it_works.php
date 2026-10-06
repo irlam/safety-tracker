@@ -1,4 +1,4 @@
-<?php /* how_it_works.php — public, no auth, no custom helpers */ ?>
+<?php /* Public help page, shared branding only. */ require_once __DIR__ . '/includes/branding.php'; ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -102,8 +102,8 @@
   <div class="wrap">
     <nav class="nav">
       <div class="brand">
-        <img src="/assets/img/logo.png" alt="McGoff" onerror="this.style.display='none'">
-        <strong>Safety Tours</strong>
+        <img src="<?= htmlspecialchars(safety_branding_logo_url(), ENT_QUOTES, 'UTF-8') ?>" alt="<?= htmlspecialchars(safety_branding()['company_name'], ENT_QUOTES, 'UTF-8') ?> logo">
+        <strong><?= htmlspecialchars(safety_branding()['company_name'], ENT_QUOTES, 'UTF-8') ?> · Safety Tours</strong>
       </div>
       <div class="cta">
         <a class="btn" href="/dashboard.php">Dashboard</a>
