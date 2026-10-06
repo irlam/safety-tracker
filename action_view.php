@@ -141,6 +141,13 @@ require_once __DIR__ . '/includes/nav.php';
   input, textarea, select{width:100%;background:#0b1220;color:#e5e7eb;border:1px solid var(--border);border-radius:12px;padding:10px}
   label{display:block;margin:6px 0 6px;color:#cbd5e1;font-weight:600}
   .err{margin:10px 0;padding:10px;border:1px solid #7f1d1d;background:#3b0a0a22;border-radius:12px;color:#fecaca}
+  @media(max-width:560px){
+    .wrap{padding:12px}.card{padding:13px}
+    .imgs{grid-template-columns:minmax(0,1fr)}.imgs img{height:auto;max-height:340px}
+    .btn{width:100%;text-align:center}
+  }
+  .btn,input,select,textarea,button{min-height:44px;font-size:16px}
+  :focus-visible{outline:3px solid #39bfee;outline-offset:2px}
 </style>
 </head>
 <body>
