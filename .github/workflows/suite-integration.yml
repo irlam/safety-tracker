@@ -38,6 +38,8 @@ jobs:
       - name: Check integration and security regression
         run: php tests/suite-integration.php
       - name: PWA service worker JavaScript syntax
-        run: node --check service-worker.js
+        run: |
+          node --check service-worker.js
+          node tests/service-worker-redirects.cjs
       - name: Branding and PDF production checks
         run: php tests/branding-regression.php
