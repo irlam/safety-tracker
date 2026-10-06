@@ -288,6 +288,9 @@ $showDeletedToast = !empty($_GET['deleted']);
   input,select,button{max-width:100%}
   .card{min-width:0}
 }
+  .brand img{height:52px;max-width:170px;object-fit:contain}
+  .navbtns{flex-wrap:wrap;gap:9px}
+  :focus-visible{outline:3px solid #39bfee;outline-offset:2px}
 </style>
 </head>
 <body>
