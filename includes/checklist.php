@@ -8,7 +8,7 @@ $CHECKLIST = [
     ['code'=>'1.4','q'=>"Have designated storage areas away from pedestrians been provided and barriered off."],
   ],
   '2.0 Statutory Information / First Aid' => [
-    ['code'=>'2.1','q'=>"Are the statutory notice boards being displayed for the McGoff Construction Ltd (H&S Policy & Arrangements, F10, CPP, First Aid, Fire information and Permits issued)."],
+    ['code'=>'2.1','q'=>"Are the statutory notice boards being displayed for the principal contractor (H&S Policy & Arrangements, F10, CPP, First Aid, Fire information and Permits issued)."],
     ['code'=>'2.2','q'=>"Has the Construction Phase Plan been reviewed for changes onsite."],
     ['code'=>'2.3','q'=>"Have the site files been developed and contain the required information under the correct appendixes."],
     ['code'=>'2.4','q'=>"Has a Temporary works file been developed (Site fencing, scaffold, propping, formwork, falsework, structural supports etc) with training in place for the appointed person."],
