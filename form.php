@@ -111,6 +111,13 @@ try {
   canvas#sig{display:block;width:100%;height:200px;background:#0000;border-radius:8px;touch-action:none}
   .sig-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:8px}
   .err{color:#fecaca;background:#3b0a0a33;border:1px solid #7f1d1d;padding:8px;border-radius:10px;margin-bottom:8px;display:none}
+  @media(max-width:600px){
+    .wrap{padding:12px}.card{padding:13px}h1{font-size:1.55rem}
+    .sig-actions{flex-wrap:wrap;justify-content:stretch}
+    .sig-actions button{flex:1}
+  }
+  input,select,textarea,button{min-height:44px;font-size:16px}
+  :focus-visible{outline:3px solid #39bfee;outline-offset:2px}
 </style>
 </head>
 <body>
