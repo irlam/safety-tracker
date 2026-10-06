@@ -1,6 +1,8 @@
 <?php
 // /pdf.php — view / rebuild / download a tour PDF
 declare(strict_types=1);
+require_once __DIR__ . '/includes/auth.php';
+auth_check();
 require_once __DIR__ . '/includes/functions.php';
 
 $id = (int)($_GET['id'] ?? 0);
@@ -18,7 +20,8 @@ $pdfPath = $pdfDir . '/tour-' . $id . '.pdf';
 if (!is_dir($pdfDir)) @mkdir($pdfDir, 0775, true);
 
 // force rebuild if asked, or if file missing
-$mustRebuild = isset($_GET['rebuild']) || !is_file($pdfPath);
+$mustRebuild = isset($_GET['rebuild']) || !is_file($pdfPath)
+  || safety_branding_revision() >= (is_file($pdfPath) ? (int) filemtime($pdfPath) : 0);
 if ($mustRebuild) {
   try {
     render_pdf($tour, $pdfPath); // uses your existing renderer
