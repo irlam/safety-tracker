@@ -1,0 +1,35 @@
+name: Verify live Safety deployment
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deployment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check current files are on sitesafety.site
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for path in             /admin_branding.php             /assets/safety-ui.css             /assets/img/safety-brand.svg             /login_admin.php; do
+            code=$(curl -sS --connect-timeout 8 --max-time 20 --output /dev/null --write-out '%{http_code}' "https://sitesafety.site$path") || code=000
+            echo "$path HTTP $code"
+            if [[ "$path" == "/admin_branding.php" ]]; then
+              # A live protected page redirects anonymous users to login;
+              # a 404 means current source has not reached this docroot.
+              case "$code" in 301|302|303|401|403) ;; *) failed=1;; esac
+            else
+              [[ "$code" == "200" ]] || failed=1
+            fi
+          done
+          if [[ "$failed" -ne 0 ]]; then
+            echo "::error::The live Safety document root lacks the current branding release. Check Plesk Git deployment target and pull/deploy."
+            exit 1
+          fi
+          echo "PASS: live Safety files are deployed."
