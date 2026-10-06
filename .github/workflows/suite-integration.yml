@@ -30,7 +30,14 @@ jobs:
           php -l actions.php
           php -l admin_users.php
           php -l tests/branding-regression.php
+          php -l form.php
+          php -l edit.php
+          php -l action_view.php
+          php -l how_it_works.php
+          php -l includes/checklist.php
       - name: Check integration and security regression
         run: php tests/suite-integration.php
+      - name: PWA service worker JavaScript syntax
+        run: node --check service-worker.js
       - name: Branding and PDF production checks
         run: php tests/branding-regression.php
