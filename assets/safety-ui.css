@@ -1,0 +1,78 @@
+
+/* Shared Site Safety identity, responsive login, admin and navigation. */
+:root{--s-bg:#0b1220;--s-card:#111d30;--s-line:#26364e;--s-text:#eaf2ff;--s-muted:#9bafc9;--s-cyan:#0ea5d7}
+*{box-sizing:border-box}
+.safety-page{min-height:100vh;background:radial-gradient(circle at 15% -15%,#15375b,#0b1220 58%);color:var(--s-text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0}
+.safety-page a{color:inherit}
+.safety-admin-layout{max-width:1220px;margin:0 auto;padding:clamp(18px,3vw,40px)}
+.safety-page-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:24px}
+.safety-page-heading h1{font-size:clamp(1.6rem,3vw,2.5rem);margin:2px 0}
+.safety-page-heading p{margin:0;color:var(--s-muted);max-width:720px}
+.safety-eyebrow{text-transform:uppercase;font-size:.72rem;color:#5cccf3;letter-spacing:.16em;font-weight:800}
+.safety-admin-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:20px}
+.safety-panel{background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015));border:1px solid var(--s-line);border-radius:22px;padding:clamp(18px,3vw,30px)}
+.safety-panel h2{font-size:1.2rem;margin:0 0 20px}
+.safety-form-field{display:grid;gap:7px;margin:0 0 20px}
+.safety-form-field label{font-size:.9rem;font-weight:650;color:#f2f6ff}
+.safety-form-field input{width:100%;font:inherit;min-height:48px;padding:11px 13px;border-radius:12px;background:#091423;border:1px solid #31425d;color:white}
+.safety-form-field input[type=file]{padding:10px;font-size:.9rem}
+.safety-form-field input:focus-visible,.safety-btn:focus-visible{outline:3px solid #47c9f5;outline-offset:2px}
+.safety-form-field small,.safety-note{font-size:.87rem;line-height:1.55;color:var(--s-muted)}
+.safety-btn{min-height:45px;padding:10px 18px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font:700 .93rem system-ui;text-decoration:none;cursor:pointer;border:1px solid var(--s-line)}
+.safety-btn.primary{background:#16a5d8;color:#081725;border-color:#16a5d8}
+.safety-btn.secondary{background:#152640;color:#eaf2ff}
+.safety-btn:hover{filter:brightness(1.12)}
+.safety-secondary-form{margin-top:14px}
+.safety-alert{padding:14px 17px;border-radius:12px;margin-bottom:20px;border:1px solid}
+.safety-alert.success{background:#092819;color:#a5f8bc;border-color:#277948}
+.safety-alert.error{background:#35171b;color:#ffd5d5;border-color:#ab474c}
+.safety-brand-preview{border-radius:17px;background:#101d31;border:1px solid #34465e;display:flex;align-items:center;gap:16px;padding:20px;margin-bottom:22px}
+.safety-brand-preview img{width:82px;max-height:80px;object-fit:contain;border-radius:12px}
+.safety-brand-preview div{min-width:0}
+.safety-brand-preview strong,.safety-brand-preview span{display:block;overflow-wrap:anywhere}
+.safety-brand-preview strong{font-size:1.16rem}.safety-brand-preview span{color:var(--s-muted);font-size:.86rem}
+.safety-paper-preview{max-width:390px;border-radius:8px;background:#f8fafc;min-height:265px;padding:22px;color:#172033;box-shadow:0 14px 42px #0004}
+.safety-paper-heading{display:flex;gap:14px;align-items:center;padding-bottom:15px;border-bottom:2px solid #e0e8f0;margin-bottom:20px}
+.safety-paper-heading img{width:72px;max-height:54px;object-fit:contain}
+.safety-paper-heading strong,.safety-paper-heading span{display:block}
+.safety-paper-heading strong{font-size:.9rem}.safety-paper-heading span{font-size:.7rem;color:#607084}
+.safety-skeleton{height:12px;border-radius:4px;background:#e1e7ee;margin-bottom:12px}
+.safety-skeleton.shorter{width:74%}.safety-skeleton.short{width:42%}
+.safety-note{margin:18px 0 0}
+.safety-login{min-height:100vh;display:grid;place-items:center;padding:clamp(12px,3vw,28px)}
+.safety-login-card{width:min(1060px,100%);display:grid;grid-template-columns:1fr 0.88fr;background:#fff;border-radius:26px;overflow:hidden;box-shadow:0 26px 95px #0007}
+.safety-login-hero{background:radial-gradient(circle at 0 100%,#1a689a,#10243d 70%);color:#f5fcff;padding:clamp(28px,5vw,58px);display:flex;flex-direction:column;justify-content:center;min-height:550px}
+.safety-login-brand{display:flex;align-items:center;gap:17px;margin-bottom:48px}
+.safety-login-brand img{width:84px;height:84px;object-fit:contain;border-radius:16px}
+.safety-login-brand strong,.safety-login-brand span{display:block}
+.safety-login-brand strong{font-size:1.35rem}.safety-login-brand span{font-size:.82rem;color:#b8cbe0}
+.safety-login-hero h1{font-size:clamp(2rem,4vw,3.25rem);letter-spacing:-.04em;line-height:1.12;margin:0 0 24px}
+.safety-login-hero p{color:#c1d8ee;max-width:440px}
+.safety-login-chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:26px}
+.safety-login-chips span{border:1px solid #ffffff46;background:#ffffff16;padding:8px 12px;border-radius:100px;font-size:.77rem}
+.safety-login-form{background:#fff;padding:clamp(26px,5vw,62px);display:flex;flex-direction:column;justify-content:center;color:#14243b}
+.safety-login-form h2{font-size:1.85rem;letter-spacing:-.035em;margin:0 0 4px}
+.safety-login-form p{color:#617184;font-size:.94rem}
+.safety-login-form label{font-weight:650;font-size:.86rem;margin-bottom:6px;display:block}
+.safety-login-form input{font:inherit;width:100%;min-height:52px;border:1px solid #cbd7e2;border-radius:12px;padding:12px 14px;background:#fff;color:#172033;margin-bottom:18px}
+.safety-login-form input:focus-visible{outline:3px solid #37b6e3;outline-offset:1px}
+.safety-login-form button{width:100%;min-height:52px;border:0;border-radius:12px;background:#109dcd;color:#071827;font:800 1rem system-ui;cursor:pointer}
+.safety-login-form button:hover{background:#22b4e1}
+.safety-login-form .safety-help{font-size:.82rem;margin-top:26px}
+@media(max-width:800px){
+ .safety-admin-grid{grid-template-columns:minmax(0,1fr)}
+ .safety-login-card{grid-template-columns:1fr;max-width:580px}
+ .safety-login-hero{min-height:unset;padding:27px}
+ .safety-login-brand{margin-bottom:14px}
+ .safety-login-brand img{width:58px;height:58px}
+ .safety-login-hero h1{font-size:1.8rem;margin-bottom:12px}
+ .safety-login-hero p{margin:0}
+ .safety-login-chips{margin-top:15px}
+ .safety-login-form{padding:27px}
+}
+@media(max-width:420px){
+ .safety-login{padding:0;display:block}
+ .safety-login-card{border-radius:0;min-height:100vh}
+ .safety-login-hero{padding:20px}
+ .safety-login-form{padding:23px}
+}
