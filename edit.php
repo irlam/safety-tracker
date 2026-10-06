@@ -294,6 +294,12 @@ try {
   canvas#sig{display:block;width:100%;height:160px;background:#00000000;border-radius:8px;touch-action:none}
   .sig-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;margin-top:8px}
   button{background:#0ea5e9;color:#00131a;font-weight:700;border:0;border-radius:10px;padding:12px 14px;cursor:pointer}
+  @media(max-width:600px){
+    .wrap{padding:12px}.card{padding:13px}h1{font-size:1.55rem}
+    .thumb img{width:100px;height:82px}
+  }
+  input,select,textarea,button{min-height:44px;font-size:16px}
+  :focus-visible{outline:3px solid #39bfee;outline-offset:2px}
 </style>
 </head>
 <body>
