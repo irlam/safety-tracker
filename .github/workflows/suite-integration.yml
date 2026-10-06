@@ -7,6 +7,8 @@ on:
 
 jobs:
   suite:
+    env:
+      SAFETY_CONFIG_FILE: ${{ github.workspace }}/tests/config-fixture.php
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +37,8 @@ jobs:
           php -l action_view.php
           php -l how_it_works.php
           php -l includes/checklist.php
+      - name: Private configuration checks
+        run: php tests/private-config.php
       - name: Check integration and security regression
         run: php tests/suite-integration.php
       - name: PWA service worker JavaScript syntax

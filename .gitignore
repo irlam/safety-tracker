@@ -5,7 +5,7 @@ uploads/*
 
 # Configuration with sensitive data
 # IMPORTANT: Prevent committing real credentials
-includes/config.php
+includes/runtime.private.php
 # Use config.example.php as a template
 
 # Temporary files

@@ -28,8 +28,8 @@ const AUTH_PASSWORD = 'change-this-password'; // IMPORTANT: Use a strong, unique
 const CONSTRUCTION_SUITE_API_KEY = 'replace-with-a-long-random-secret';
 
 // Files
-const UPLOAD_DIR = __DIR__ . '/../uploads';
+const UPLOAD_DIR = SAFETY_APP_ROOT . '/uploads';
 if (!is_dir(UPLOAD_DIR)) mkdir(UPLOAD_DIR, 0775, true);
 
 // Bootstrap (no Composer)
-require_once __DIR__ . '/bootstrap.php';
+require_once SAFETY_APP_ROOT . '/includes/bootstrap.php';
