@@ -7,8 +7,11 @@ $brand = safety_branding();
 $err = '';
 $next = (string) ($_POST['next'] ?? $_GET['next'] ?? '/dashboard.php');
 // Local redirects only. Prevent host-switching and header injection.
-if ($next === '' || $next[0] !== '/' || str_starts_with($next, '//')
-    || preg_match('/[\\\r\n]/', $next) || str_contains($next, '://')) {
+$decodedNext = rawurldecode($next);
+if ($next === '' || $next[0] !== '/' || str_starts_with($decodedNext, '//')
+    || str_contains($decodedNext, '\\') || str_contains($decodedNext, "\r")
+    || str_contains($decodedNext, "\n") || str_contains($decodedNext, "\0")
+    || str_contains($decodedNext, '://')) {
     $next = '/dashboard.php';
 }
 if (!empty($_SESSION['auth'])) {
