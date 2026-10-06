@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/branding.php';
 
 // ---------- Timezone (UK) ----------
 date_default_timezone_set(defined('TIMEZONE') ? TIMEZONE : 'Europe/London');
@@ -272,13 +273,8 @@ function pdf_priority_colour(string $prio): array {
 }
 
 function find_logo_path(): ?string {
-  foreach ([
-    __DIR__.'/../assets/img/mcgoff.png',
-    $_SERVER['DOCUMENT_ROOT'].'/assets/img/mcgoff.png',
-    __DIR__.'/../assets/img/logo.png',
-    $_SERVER['DOCUMENT_ROOT'].'/assets/img/logo.png',
-  ] as $p) if (@is_file($p)) return $p;
-  return null;
+  // A shared admin-managed identity, never a hardcoded contractor logo.
+  return safety_branding_pdf_logo();
 }
 
 /**
@@ -323,8 +319,11 @@ function render_pdf(array $tour, string $outPath): void {
 
   // ---- Header
   if ($logo=find_logo_path()) $pdf->Image($logo,12,10,28);
-  $pdf->SetFont('Arial','B',16);
-  $pdf->Cell(0,10,pdf_text('Site Safety Tour — Report'),0,1,'R');
+  $brand = safety_branding();
+  $pdf->SetFont('Arial','B',13);
+  $pdf->Cell(0,9,pdf_text($brand['report_title']),0,1,'R');
+  $pdf->SetFont('Arial','',10);
+  $pdf->Cell(0,6,pdf_text($brand['company_name']),0,1,'R');
 
   $pdf->SetFont('Arial','',10);
   $scoreTxt = '';
